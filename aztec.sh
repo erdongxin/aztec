@@ -55,28 +55,23 @@ install_aztec() {
     fi
 }
 
-
 # 检查并创建aztec.env文件
 setup_aztec_env() {
     AZTEC_ENV_FILE="/root/aztec.env"
+
+    echo -e "${GREEN}未找到aztec.env文件，需要配置环境变量${RESET}"
+    read -p "请输入BEACON RPC地址: " BEACON_RPC
+    read -p "请输入eth sepolia rpc地址: " L1_RPC_URL
+    read -p "请输入0x开头的以太坊私钥（eth sepolia余额需大于0.1）: " PRIVATE_KEY
+    read -p "请输入0x开头的以太坊地址: " COINBASE
     
-    if [ ! -f "$AZTEC_ENV_FILE" ]; then
-        echo -e "${GREEN}未找到aztec.env文件，需要配置环境变量${RESET}"
-        read -p "请输入BEACON RPC地址: " BEACON_RPC
-        read -p "请输入eth sepolia rpc地址: " L1_RPC_URL
-        read -p "请输入0x开头的以太坊私钥（eth sepolia余额需大于0.1）: " PRIVATE_KEY
-        read -p "请输入0x开头的以太坊地址: " COINBASE
-        
-        # 写入环境变量文件
-        echo "BEACON_RPC=$BEACON_RPC" > "$AZTEC_ENV_FILE"
-        echo "L1_RPC_URL=$L1_RPC_URL" >> "$AZTEC_ENV_FILE"
-        echo "PRIVATE_KEY=$PRIVATE_KEY" >> "$AZTEC_ENV_FILE"
-        echo "COINBASE=$COINBASE" >> "$AZTEC_ENV_FILE"
-        
-        echo -e "${GREEN}aztec.env文件已创建${RESET}"
-    else
-        echo -e "${GREEN}aztec.env文件已存在${RESET}"
-    fi
+    # 写入环境变量文件
+    echo "BEACON_RPC=$BEACON_RPC" > "$AZTEC_ENV_FILE"
+    echo "L1_RPC_URL=$L1_RPC_URL" >> "$AZTEC_ENV_FILE"
+    echo "PRIVATE_KEY=$PRIVATE_KEY" >> "$AZTEC_ENV_FILE"
+    echo "COINBASE=$COINBASE" >> "$AZTEC_ENV_FILE"
+    
+    echo -e "${GREEN}aztec.env文件已创建${RESET}"
 }
 
 show_menu() {
@@ -88,7 +83,8 @@ show_menu() {
     echo "1. 启动节点"
     echo "2. 查看日志"
     echo "3. 删除节点"
-    echo "4. 退出"
+    echo "4. 配置变量"
+    echo "5. 退出"
     echo "==============================="
     read -p "请选择操作: " choice
 
@@ -97,8 +93,14 @@ show_menu() {
         install_docker
         install_screen
         install_aztec
-        setup_aztec_env
 
+        if [ ! -f "/root/aztec.env" ]; then
+          setup_aztec_env
+          echo -e "${GREEN}aztec.env文件已创建${RESET}"
+        else
+          echo -e "${GREEN}aztec.env文件已存在${RESET}"
+        fi
+        
         # 下载脚本
         curl -L https://raw.githubusercontent.com/erdongxin/aztec/refs/heads/main/aztec_node.sh -o /root/aztec_node.sh
         sleep 1
@@ -110,7 +112,7 @@ show_menu() {
         fi
 
         chmod +x aztec_node.sh && screen -dmS aztec_node bash aztec_node.sh
-        echo "${GREEN}[▶] 节点已启动 (查看日志请使用 screen -r aztec_node)${RESET}"
+        echo -e "${GREEN}[▶] 节点已启动 (查看日志请使用 screen -r aztec_node)${RESET}"
 
         echo "按任意键返回主菜单..."
         read -n 1
@@ -135,6 +137,11 @@ show_menu() {
         read -n 1
         ;;
       4)
+        setup_aztec_env
+        echo "按任意键返回主菜单..."
+        read -n 1
+        ;;
+      5)
         exit 0
         ;;
       *)
