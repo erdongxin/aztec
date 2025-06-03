@@ -29,13 +29,36 @@ if [ ${#missing_vars[@]} -ne 0 ]; then
     exit 1
 fi
 
-# 启动容器
-echo "[🚀] 启动$NODE_NAME"
-aztec start --node --archiver --sequencer \
-  --network alpha-testnet \
-  --l1-rpc-urls $L1_RPC_URL \
-  --l1-consensus-host-urls $BEACON_RPC \
-  --sequencer.validatorPrivateKey $PRIVATE_KEY \
-  --sequencer.coinbase $COINBASE \
-  --p2p.p2pIp $(curl -s ipv4.icanhazip.com) \
-  --data-directory /root/.$NODE_NAME
+# 函数：启动节点
+start_node() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] 启动$NODE_NAME"
+    aztec start --node --archiver --sequencer \
+      --network alpha-testnet \
+      --l1-rpc-urls "$L1_RPC_URL" \
+      --l1-consensus-host-urls "$BEACON_RPC" \
+      --sequencer.validatorPrivateKey "$PRIVATE_KEY" \
+      --sequencer.coinbase "$COINBASE" \
+      --p2p.p2pIp "$(curl -s ipv4.icanhazip.com)" \
+      --data-directory "/root/.$NODE_NAME"
+    
+    # 获取aztec命令的退出状态
+    local exit_code=${PIPESTATUS[0]}
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] 节点进程退出，代码: $exit_code"
+    return $exit_code
+}
+
+# 主循环
+while true; do
+    # 启动节点并捕获输出
+    start_node
+
+    # 检查退出状态
+    if [ $? -eq 0 ]; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] 节点正常退出"
+        break
+    else
+        # 如果非正常退出，等待10秒后重启
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] 节点异常退出，10秒后尝试重启..."
+        sleep 10
+    fi
+done
