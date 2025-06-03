@@ -101,6 +101,7 @@ show_menu() {
 
         # 下载脚本
         curl -L https://raw.githubusercontent.com/erdongxin/aztec/refs/heads/main/aztec_node.sh -o /root/aztec_node.sh
+        sleep 1
 
         if screen -ls | grep aztec_node > /dev/null; then
             echo -e "${YELLOW}节点已运行，正在重启中...${RESET}"
@@ -109,17 +110,17 @@ show_menu() {
         fi
 
         chmod +x aztec_node.sh && screen -dmS aztec_node bash aztec_node.sh
-        echo "[${GREEN}▶${RESET}] 节点已启动 (查看日志请使用 screen -r aztec_node)"
+        echo "${GREEN}[▶] 节点已启动 (查看日志请使用 screen -r aztec_node)${RESET}"
 
         echo "按任意键返回主菜单..."
         read -n 1
         ;;
       2)
         if screen -ls | grep aztec_node > /dev/null; then
-            echo -e "${YELLOW}节点未运行${RESET}"
-        else
           echo "ctrl + A + D 安全退出日志"
           screen -r aztec_node
+        else
+          echo -e "${YELLOW}节点未运行${RESET}"
         fi
         echo "按任意键返回主菜单..."
         read -n 1
@@ -134,7 +135,6 @@ show_menu() {
         read -n 1
         ;;
       4)
-        echo "退出"
         exit 0
         ;;
       *)
