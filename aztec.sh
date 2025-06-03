@@ -39,7 +39,7 @@ install_screen() {
 
 # 安装 Aztec CLI
 install_aztec() {
-    if ! command aztec &> /dev/null; then
+    if ! command -v aztec &> /dev/null; then
         echo -e "${RED}未检测到 Aztec CLI，正在安装...${RESET}"
         yes y | bash -i <(curl -s https://install.aztec.network)
 
@@ -62,7 +62,7 @@ setup_aztec_env() {
     echo -e "${GREEN}未找到aztec.env文件，需要配置环境变量${RESET}"
     read -p "请输入BEACON RPC地址: " BEACON_RPC
     read -p "请输入eth sepolia rpc地址: " L1_RPC_URL
-    read -p "请输入0x开头的以太坊私钥（eth sepolia余额需大于0.1）: " PRIVATE_KEY
+    read -p "请输入0x开头的以太坊私钥（eth sepolia余额需大于0.01）: " PRIVATE_KEY
     read -p "请输入0x开头的以太坊地址: " COINBASE
     
     # 写入环境变量文件
@@ -112,7 +112,7 @@ show_menu() {
         fi
 
         chmod +x aztec_node.sh && screen -dmS aztec_node bash aztec_node.sh
-        echo -e "${GREEN}[▶] 节点已启动 (查看日志请使用 screen -r aztec_node)${RESET}"
+        echo -e "${GREEN}[▶] 节点已启动，查看日志请使用 screen -r aztec_node ${RESET}"
 
         echo "按任意键返回主菜单..."
         read -n 1
