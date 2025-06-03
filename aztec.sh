@@ -101,6 +101,9 @@ show_menu() {
           echo -e "${GREEN}aztec.env文件已存在${RESET}"
         fi
         
+        # 添加环境变量
+        echo 'export PATH="$HOME/.aztec/bin:$PATH"' >> ~/.bashrc &&  source  ~/.bashrc
+
         # 下载脚本
         curl -L https://raw.githubusercontent.com/erdongxin/aztec/refs/heads/main/aztec_node.sh -o /root/aztec_node.sh
         sleep 1
