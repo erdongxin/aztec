@@ -108,11 +108,8 @@ show_menu() {
         curl -L https://raw.githubusercontent.com/erdongxin/aztec/refs/heads/main/aztec_node.sh -o /root/aztec_node.sh
         sleep 1
 
-        if screen -ls | grep aztec_node > /dev/null; then
-            echo -e "${YELLOW}节点已运行，正在重启中...${RESET}"
-            screen -ls | grep aztec_node | awk '{print $1}' | sed 's/\.aztec_node$//' | xargs -I {} screen -S {} -X quit
-            sleep 2
-        fi
+        screen -ls | grep aztec_node | awk '{print $1}' | sed 's/\.aztec_node$//' | xargs -I {} screen -S {} -X quit
+        docker ps -a --filter "name=aztec" -q | xargs --no-run-if-empty docker rm -f
 
         chmod +x aztec_node.sh && screen -dmS aztec_node bash aztec_node.sh
         echo -e "${GREEN}[▶] 节点已启动，查看日志请使用 screen -r aztec_node ${RESET}"
@@ -132,6 +129,7 @@ show_menu() {
         ;;
       3)
         screen -ls | grep aztec_node | awk '{print $1}' | sed 's/\.aztec_node$//' | xargs -I {} screen -S {} -X quit
+        docker ps -a --filter "name=aztec" -q | xargs --no-run-if-empty docker rm -f
         echo "已停止运行!"
         rm -rf /root/aztec_node
         echo "数据已清空!"
