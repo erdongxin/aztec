@@ -1,37 +1,125 @@
 #!/bin/bash
 
-check_docker_installed() {
-  if ! command -v docker &> /dev/null; then
-    echo "[+] Docker 未安装，正在安装..."
-    curl -fsSL https://get.docker.com | bash
-    sudo systemctl enable docker
-    sudo systemctl start docker
-  else
-    echo "[✔] Docker 已安装"
-  fi
+# 颜色定义
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+RESET='\033[0m'
+
+# 安装 Docker
+install_docker() {
+    if ! command -v docker &> /dev/null; then
+        echo -e "${RED}未找到 Docker，正在安装...${RESET}"
+        apt-get update -y
+        apt-get install -y apt-transport-https ca-certificates curl software-properties-common gnupg lsb-release
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+        echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] \
+        https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | \
+        tee /etc/apt/sources.list.d/docker.list > /dev/null
+        apt-get update -y
+        apt-get install -y docker-ce docker-ce-cli containerd.io
+        systemctl start docker
+        systemctl enable docker
+        echo -e "${GREEN}Docker 已安装并启动${RESET}"
+    else
+        echo -e "${GREEN}Docker 已安装${RESET}"
+    fi
+}
+
+# 安装 screen
+install_screen() {
+    if ! command -v screen &> /dev/null; then
+        echo -e "${RED}未找到 screen，正在安装...${RESET}"
+        apt-get update -y
+        apt-get install -y screen
+        echo -e "${GREEN}screen 已安装${RESET}"
+    else
+        echo -e "${GREEN}screen 已安装${RESET}"
+    fi
+}
+
+# 安装 Aztec CLI
+install_aztec() {
+    if ! command aztec &> /dev/null; then
+        echo -e "${RED}未检测到 Aztec CLI，正在安装...${RESET}"
+        yes y | bash -i <(curl -s https://install.aztec.network)
+
+        # 添加环境变量到 PATH
+        if ! grep -q 'aztec/bin' ~/.bashrc; then
+            echo 'export PATH="$HOME/.aztec/bin:$PATH"' >> ~/.bashrc
+            source ~/.bashrc
+        fi
+
+        echo -e "${GREEN}Aztec CLI 安装完成并配置环境变量。${RESET}"
+    else
+        echo -e "${GREEN}Aztec CLI 已安装${RESET}"
+    fi
+}
+
+
+# 检查并创建aztec.env文件
+setup_aztec_env() {
+    AZTEC_ENV_FILE="/root/aztec.env"
+    
+    if [ ! -f "$AZTEC_ENV_FILE" ]; then
+        echo -e "${GREEN}未找到aztec.env文件，需要配置环境变量${RESET}"
+        read -p "请输入BEACON RPC地址: " BEACON_RPC
+        read -p "请输入eth sepolia rpc地址: " L1_RPC_URL
+        read -p "请输入0x开头的以太坊私钥（eth sepolia余额需大于0.1）: " PRIVATE_KEY
+        read -p "请输入0x开头的以太坊地址: " COINBASE
+        
+        # 写入环境变量文件
+        echo "BEACON_RPC=$BEACON_RPC" > "$AZTEC_ENV_FILE"
+        echo "L1_RPC_URL=$L1_RPC_URL" >> "$AZTEC_ENV_FILE"
+        echo "PRIVATE_KEY=$PRIVATE_KEY" >> "$AZTEC_ENV_FILE"
+        echo "COINBASE=$COINBASE" >> "$AZTEC_ENV_FILE"
+        
+        echo -e "${GREEN}aztec.env文件已创建${RESET}"
+    else
+        echo -e "${GREEN}aztec.env文件已存在${RESET}"
+    fi
 }
 
 show_menu() {
-  echo "====== Aztec 多节点控制台 ======"
-  echo "1. 启动节点 1"
-  echo "2. 启动节点 2"
-  echo "3. 启动节点 3"
+  echo "===================================================================="
+  echo "======@Chancy59850326编写，Aztec节点控制台，免费开源，请勿相信收费======"
+  echo "===================================================================="
+  echo "1. 启动节点"
+  echo "2. 查看日志"
+  echo "3. 删除节点"
   echo "4. 退出"
   echo "==============================="
   read -p "请选择操作: " choice
 
   case $choice in
     1)
-      screen -dmS aztec_node1 bash aztec_node1.sh
-      echo "[▶] 节点1 正在后台运行 (screen: aztec_node1)"
+      install_docker
+      install_screen
+      install_aztec
+      setup_aztec_env
+
+      # 下载脚本
+      curl -L https://raw.githubusercontent.com/erdongxin/aztec/refs/heads/main/aztec_node.sh -o /root/aztec_node.sh
+
+      if screen -ls | grep aztec_node > /dev/null; then
+          echo -e "${YELLOW}节点已运行，正在重启中...${RESET}"
+          screen -ls | grep aztec_node | awk '{print $1}' | sed 's/\.aztec_node$//' | xargs -I {} screen -S {} -X quit
+          sleep 2
+      fi
+
+      chmod +x aztec_node.sh && screen -dmS aztec_node bash aztec_node.sh
+      echo "[${GREEN}▶${RESET}] 节点已启动 (查看日志请使用 screen -r aztec_node)"
       ;;
     2)
-      screen -dmS aztec_node2 bash aztec_node2.sh
-      echo "[▶] 节点2 正在后台运行 (screen: aztec_node2)"
+      echo "ctrl + A + D 安全退出日志"
+      screen -r aztec_node
+      exit 0
       ;;
     3)
-      screen -dmS aztec_node3 bash aztec_node3.sh
-      echo "[▶] 节点3 正在后台运行 (screen: aztec_node3)"
+      screen -ls | grep aztec_node | awk '{print $1}' | sed 's/\.aztec_node$//' | xargs -I {} screen -S {} -X quit
+      echo "已停止运行!"
+      rm -rf /root/aztec_node
+      echo "数据已清空!"
+      exit 0
       ;;
     4)
       echo "退出"
@@ -44,7 +132,6 @@ show_menu() {
 }
 
 main() {
-  check_docker_installed
   show_menu
 }
 
