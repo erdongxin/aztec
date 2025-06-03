@@ -37,6 +37,18 @@ install_screen() {
     fi
 }
 
+# 安装 jq
+install_jq() {
+    if ! command -v jq &> /dev/null; then
+        echo -e "${RED}未找到 jq，正在安装...${RESET}"
+        apt-get update -y
+        apt-get install -y jq
+        echo -e "${GREEN}jq 已安装${RESET}"
+    else
+        echo -e "${GREEN}jq 已安装${RESET}"
+    fi
+}
+
 # 安装 Aztec CLI
 install_aztec() {
     if ! command -v aztec &> /dev/null; then
@@ -92,6 +104,7 @@ show_menu() {
       1)
         install_docker
         install_screen
+        install_jq
         install_aztec
 
         if [ ! -f "/root/aztec.env" ]; then
