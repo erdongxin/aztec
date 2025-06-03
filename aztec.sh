@@ -80,56 +80,70 @@ setup_aztec_env() {
 }
 
 show_menu() {
-  clear
-  echo "===================================================================="
-  echo "======@Chancy59850326编写，Aztec节点控制台，免费开源，请勿相信收费======"
-  echo "===================================================================="
-  echo "1. 启动节点"
-  echo "2. 查看日志"
-  echo "3. 删除节点"
-  echo "4. 退出"
-  echo "==============================="
-  read -p "请选择操作: " choice
+  while true; do
+    clear
+    echo "===================================================================="
+    echo "======@Chancy59850326编写，Aztec节点控制台，免费开源，请勿相信收费======"
+    echo "===================================================================="
+    echo "1. 启动节点"
+    echo "2. 查看日志"
+    echo "3. 删除节点"
+    echo "4. 退出"
+    echo "==============================="
+    read -p "请选择操作: " choice
 
-  case $choice in
-    1)
-      install_docker
-      install_screen
-      install_aztec
-      setup_aztec_env
+    case $choice in
+      1)
+        install_docker
+        install_screen
+        install_aztec
+        setup_aztec_env
 
-      # 下载脚本
-      curl -L https://raw.githubusercontent.com/erdongxin/aztec/refs/heads/main/aztec_node.sh -o /root/aztec_node.sh
+        # 下载脚本
+        curl -L https://raw.githubusercontent.com/erdongxin/aztec/refs/heads/main/aztec_node.sh -o /root/aztec_node.sh
 
-      if screen -ls | grep aztec_node > /dev/null; then
-          echo -e "${YELLOW}节点已运行，正在重启中...${RESET}"
-          screen -ls | grep aztec_node | awk '{print $1}' | sed 's/\.aztec_node$//' | xargs -I {} screen -S {} -X quit
-          sleep 2
-      fi
+        if screen -ls | grep aztec_node > /dev/null; then
+            echo -e "${YELLOW}节点已运行，正在重启中...${RESET}"
+            screen -ls | grep aztec_node | awk '{print $1}' | sed 's/\.aztec_node$//' | xargs -I {} screen -S {} -X quit
+            sleep 2
+        fi
 
-      chmod +x aztec_node.sh && screen -dmS aztec_node bash aztec_node.sh
-      echo "[${GREEN}▶${RESET}] 节点已启动 (查看日志请使用 screen -r aztec_node)"
-      ;;
-    2)
-      echo "ctrl + A + D 安全退出日志"
-      screen -r aztec_node
-      exit 0
-      ;;
-    3)
-      screen -ls | grep aztec_node | awk '{print $1}' | sed 's/\.aztec_node$//' | xargs -I {} screen -S {} -X quit
-      echo "已停止运行!"
-      rm -rf /root/aztec_node
-      echo "数据已清空!"
-      exit 0
-      ;;
-    4)
-      echo "退出"
-      exit 0
-      ;;
-    *)
-      echo "无效选择"
-      ;;
-  esac
+        chmod +x aztec_node.sh && screen -dmS aztec_node bash aztec_node.sh
+        echo "[${GREEN}▶${RESET}] 节点已启动 (查看日志请使用 screen -r aztec_node)"
+
+        echo "按任意键返回主菜单..."
+        read -n 1
+        ;;
+      2)
+        if screen -ls | grep aztec_node > /dev/null; then
+            echo -e "${YELLOW}节点未运行${RESET}"
+        else
+          echo "ctrl + A + D 安全退出日志"
+          screen -r aztec_node
+        fi
+        echo "按任意键返回主菜单..."
+        read -n 1
+        ;;
+      3)
+        screen -ls | grep aztec_node | awk '{print $1}' | sed 's/\.aztec_node$//' | xargs -I {} screen -S {} -X quit
+        echo "已停止运行!"
+        rm -rf /root/aztec_node
+        echo "数据已清空!"
+
+        echo "按任意键返回主菜单..."
+        read -n 1
+        ;;
+      4)
+        echo "退出"
+        exit 0
+        ;;
+      *)
+        echo "无效选择"
+        echo "按任意键返回主菜单..."
+        read -n 1
+        ;;
+    esac
+  done
 }
 
 main() {
