@@ -115,7 +115,9 @@ show_menu() {
         fi
         
         # 添加环境变量
-        echo 'export PATH="$HOME/.aztec/bin:$PATH"' >> ~/.bashrc &&  source  ~/.bashrc
+        if ! grep -q 'aztec/bin' ~/.profile; then
+          echo 'export PATH="$HOME/.aztec/bin:$PATH"' >> ~/.profile
+        fi
 
         # 下载脚本
         curl -L https://raw.githubusercontent.com/erdongxin/aztec/refs/heads/main/aztec_node.sh -o /root/aztec_node.sh
