@@ -1,9 +1,11 @@
 #!/bin/bash
+export PATH="$HOME/.aztec/bin:$PATH"
 
 # 公共环境变量
 L1_CHAIN_ID=11155111
 STAKING_ASSET_HANDLER=0xF739D03e98e23A7B65940848aBA8921fF3bAc4b2
 NODE_NAME="aztec-node"
+
 
 # 导入aztec.env文件
 AZTEC_ENV="/root/aztec.env"
@@ -40,7 +42,7 @@ start_node() {
       --sequencer.coinbase "$COINBASE" \
       --p2p.p2pIp "$(curl -s ipv4.icanhazip.com)" \
       --data-directory "/root/.$NODE_NAME"
-    
+
     # 获取aztec命令的退出状态
     local exit_code=${PIPESTATUS[0]}
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] 节点进程退出，代码: $exit_code"
