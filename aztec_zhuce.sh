@@ -34,7 +34,7 @@ OUTPUT=$(register_validator | tee /dev/tty)
 
 # 解析 ValidatorQuotaFilledUntil 错误中的时间戳
 if echo "$OUTPUT" | grep -q "ValidatorQuotaFilledUntil("; then
-  TS=$(echo "$OUTPUT" | grep -oP 'ValidatorQuotaFilledUntil\(\K[0-9]+')
+  TS=$(echo "$OUTPUT" | grep -oP 'ValidatorQuotaFilledUntil\(\K[0-9]+' | head -n1)
 
   if [[ -z "$TS" ]]; then
     echo "❌ 无法解析 ValidatorQuotaFilledUntil 时间戳"
@@ -63,3 +63,4 @@ else
   echo "✅ 注册返回，无需延迟处理："
   echo "$OUTPUT"
 fi
+
