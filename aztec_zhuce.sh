@@ -26,13 +26,13 @@ register_validator() {
     --attester "$COINBASE" \
     --proposer-eoa "$COINBASE" \
     --staking-asset-handler "$STAKING_HANDLER" \
-    --l1-chain-id "$CHAIN_ID" 2>&1
+    --l1-chain-id "$CHAIN_ID"
 }
 
-# 先尝试注册
-OUTPUT=$(register_validator)
+# 执行注册并输出显示
+OUTPUT=$(register_validator | tee /dev/tty)
 
-# 提取 ValidatorQuotaFilledUntil 错误中的时间戳
+# 解析 ValidatorQuotaFilledUntil 错误中的时间戳
 if echo "$OUTPUT" | grep -q "ValidatorQuotaFilledUntil("; then
   TS=$(echo "$OUTPUT" | grep -oP 'ValidatorQuotaFilledUntil\(\K[0-9]+')
 
