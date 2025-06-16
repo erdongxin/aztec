@@ -1,4 +1,5 @@
 #!/bin/bash
+command -v aztec >/dev/null 2>&1 || { echo "❌ 未找到 aztec 命令，请确保已正确安装 aztec-cli"; exit 1; }
 echo "=== aztec_zhuce.sh 脚本启动 ==="
 
 set -e
