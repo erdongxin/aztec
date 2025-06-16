@@ -33,7 +33,6 @@ register_validator() {
 OUTPUT=$(register_validator | tee /dev/tty)
 
 # 解析 ValidatorQuotaFilledUntil 错误中的时间戳
-# 提取 ValidatorQuotaFilledUntil 错误中的时间戳
 if echo "$OUTPUT" | grep -q "ValidatorQuotaFilledUntil("; then
   TS=$(echo "$OUTPUT" | grep -oP 'ValidatorQuotaFilledUntil\(\K[0-9]+' | head -n1)
 
@@ -66,15 +65,30 @@ if echo "$OUTPUT" | grep -q "ValidatorQuotaFilledUntil("; then
     else
       sleep "$INTERVAL"
       WAIT=$((TS - $(date +%s) - 5))
+      echo ""
+      echo "======================================"
+      echo "⏳ 当前时间：$(date)"
       echo "⌛ Validator 配额释放时间：$AT"
-      echo "⏳ 当前时间：$(date)，仍需等待 $WAIT 秒..."
+      echo "⏳ 仍需等待 $WAIT 秒..."
     fi
   done
 
   echo "🔁 尝试重新注册 Validator ($(date))"
   register_validator
 else
-  echo "✅ 注册返回，无需延迟处理："
+  WEBHOOK="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=20745fb3-d024-4856-9b95-4c97f3f283c8"
+  
+  WECHAT_MSG="🎉 Aztec 注册成功！！！！！！！！！！\n⏰ 时间：$(date)\n💼 钱包：$COINBASE"
+  curl "$WEBHOOK" \
+    -H 'Content-Type: application/json' \
+    -d '{
+      "msgtype": "markdown",
+      "markdown": {
+        "content": "'"$WECHAT_MSG"'"
+      }
+    }'
+
+  echo "✅ 注册成功！！！！！！！！！！"
   echo "$OUTPUT"
 fi
 
