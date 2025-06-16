@@ -1,4 +1,5 @@
 #!/bin/bash
+echo "=== aztec_zhuce.sh 脚本启动 ==="
 
 set -e
 
