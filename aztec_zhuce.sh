@@ -78,7 +78,7 @@ if echo "$OUTPUT" | grep -q "ValidatorQuotaFilledUntil("; then
   register_validator
 else
 
-  WECHAT_MSG="Aztec 验证者注册成功！！！！！！！！！！\n 时间：$(date)\n 钱包：$COINBASE"
+  WECHAT_MSG="Aztec 验证者注册成功！！！！！！！！！！\n 成功时间：$(date)\n 注册地址：$COINBASE"
   curl "$WEBHOOK" \
     -H 'Content-Type: application/json' \
     -d '{
