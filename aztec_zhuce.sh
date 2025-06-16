@@ -4,6 +4,7 @@ echo "=== aztec_zhuce.sh 脚本启动 ==="
 set -e
 
 ENV_FILE="/root/aztec.env"
+WEBHOOK="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=20745fb3-d024-4856-9b95-4c97f3f283c8"
 
 # 加载环境变量
 source <(grep '=' "$ENV_FILE" | sed 's/ *= */=/g')
@@ -76,9 +77,9 @@ if echo "$OUTPUT" | grep -q "ValidatorQuotaFilledUntil("; then
   echo "🔁 尝试重新注册 Validator ($(date))"
   register_validator
 else
-  WEBHOOK="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=20745fb3-d024-4856-9b95-4c97f3f283c8"
+
   
-  WECHAT_MSG="🎉 Aztec 注册成功！！！！！！！！！！\n⏰ 时间：$(date)\n💼 钱包：$COINBASE"
+  WECHAT_MSG="Aztec 注册成功！！！！！！！！！！\n 时间：$(date)\n 钱包：$COINBASE"
   curl "$WEBHOOK" \
     -H 'Content-Type: application/json' \
     -d '{
