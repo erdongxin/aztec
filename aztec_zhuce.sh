@@ -33,6 +33,7 @@ register_validator() {
 OUTPUT=$(register_validator | tee /dev/tty)
 
 # 解析 ValidatorQuotaFilledUntil 错误中的时间戳
+# 提取 ValidatorQuotaFilledUntil 错误中的时间戳
 if echo "$OUTPUT" | grep -q "ValidatorQuotaFilledUntil("; then
   TS=$(echo "$OUTPUT" | grep -oP 'ValidatorQuotaFilledUntil\(\K[0-9]+' | head -n1)
 
@@ -54,8 +55,21 @@ if echo "$OUTPUT" | grep -q "ValidatorQuotaFilledUntil("; then
   AT=$(date -d "@$TS")
   echo "⏳ 当前时间：$(date)"
   echo "⌛ Validator 配额释放时间：$AT"
-  echo "🕐 将在 $WAIT 秒后重试注册（提前5秒）..."
-  sleep "$WAIT"
+  echo "🕐 距离注册尝试还有 $WAIT 秒（提前5秒）..."
+
+  # 分段等待提示
+  INTERVAL=600  # 10分钟提示一次
+  while [ "$WAIT" -gt 0 ]; do
+    if [ "$WAIT" -le "$INTERVAL" ]; then
+      sleep "$WAIT"
+      break
+    else
+      sleep "$INTERVAL"
+      WAIT=$((TS - $(date +%s) - 5))
+      echo "⌛ Validator 配额释放时间：$AT"
+      echo "⏳ 当前时间：$(date)，仍需等待 $WAIT 秒..."
+    fi
+  done
 
   echo "🔁 尝试重新注册 Validator ($(date))"
   register_validator
@@ -63,4 +77,5 @@ else
   echo "✅ 注册返回，无需延迟处理："
   echo "$OUTPUT"
 fi
+
 
