@@ -46,8 +46,7 @@ start_node() {
         --sequencer.validatorPrivateKey "$PRIVATE_KEY" \
         --sequencer.coinbase "$COINBASE" \
         --p2p.p2pIp "$(curl -s ipv4.icanhazip.com)" \
-        --data-directory "/root/.$NODE_NAME" &
-
+        --data-directory "/root/.$NODE_NAME"
     return $?
 }
 
