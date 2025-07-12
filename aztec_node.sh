@@ -50,7 +50,6 @@ start_node() {
     return $?
 }
 
-
 # 主循环
 while true; do
     start_node
