@@ -39,7 +39,6 @@ upgrade_node() {
 # 启动函数
 start_node() {
     echo -e "\033[0;34m[$(date '+%Y-%m-%d %H:%M:%S')] 正在启动节点...\033[0m"
-
     aztec start --node --archiver --sequencer \
         --network alpha-testnet \
         --l1-rpc-urls "$L1_RPC_URL" \
@@ -49,18 +48,6 @@ start_node() {
         --p2p.p2pIp "$(curl -s ipv4.icanhazip.com)" \
         --data-directory "/root/.$NODE_NAME" &
 
-    aztec_pid=$!
-    sleep 10  # 等待容器启动
-
-    echo -e "\033[0;33m尝试限制 aztec 容器的内存为 4GB...\033[0m"
-
-    # 获取刚刚启动的 Aztec 相关容器
-    docker ps --filter "name=aztec" --format "{{.ID}}" | while read container_id; do
-        echo "⏳ 限制容器 $container_id 内存..."
-        docker update --memory=4g --memory-swap=4g "$container_id"
-    done
-
-    wait $aztec_pid
     return $?
 }
 
