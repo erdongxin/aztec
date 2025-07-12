@@ -39,6 +39,8 @@ upgrade_node() {
 # 启动函数
 start_node() {
     echo -e "\033[0;34m[$(date '+%Y-%m-%d %H:%M:%S')] 正在启动节点...\033[0m"
+    export NODE_OPTIONS="--max-old-space-size=4096"
+
     aztec start --node --archiver --sequencer \
         --network alpha-testnet \
         --l1-rpc-urls "$L1_RPC_URL" \
