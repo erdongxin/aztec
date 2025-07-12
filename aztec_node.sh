@@ -5,6 +5,7 @@ export PATH="$HOME/.aztec/bin:$PATH"
 L1_CHAIN_ID=11155111
 STAKING_ASSET_HANDLER=0xF739D03e98e23A7B65940848aBA8921fF3bAc4b2
 NODE_NAME="aztec-node"
+DATA_DIR="/root/.$NODE_NAME"
 
 # 导入环境变量
 AZTEC_ENV="/root/aztec.env"
@@ -46,7 +47,7 @@ start_node() {
         --sequencer.validatorPrivateKey "$PRIVATE_KEY" \
         --sequencer.coinbase "$COINBASE" \
         --p2p.p2pIp "$(curl -s ipv4.icanhazip.com)" \
-        --data-directory "/root/.$NODE_NAME"
+        --data-directory "$DATA_DIR"
     return $?
 }
 
@@ -55,7 +56,13 @@ while true; do
     start_node
     exit_code=$?
 
-    if [ $exit_code -ne 0 ]; then
+    if [ $exit_code -eq 1 ]; then
+        echo -e "\033[0;31m[$(date '+%Y-%m-%d %H:%M:%S')] 检测到状态码1，删除数据目录后重新同步...\033[0m"
+        echo -e "\033[0;33m删除数据目录 $DATA_DIR 中...\033[0m"
+        rm -rf "$DATA_DIR"
+        echo -e "\033[0;32m数据目录已删除，10秒后重启节点...\033[0m"
+        sleep 10
+    elif [ $exit_code -ne 0 ]; then
         echo -e "\033[0;31m[$(date '+%Y-%m-%d %H:%M:%S')] 节点异常退出 (退出码: $exit_code)\033[0m"
         upgrade_node
         echo -e "\033[0;34m10秒后尝试重新启动节点...\033[0m"
@@ -64,6 +71,7 @@ while true; do
         echo -e "\033[0;32m[$(date '+%Y-%m-%d %H:%M:%S')] 节点正常退出，10秒后重启...\033[0m"
         sleep 10
     fi
+
     # 删除占用的容器
     docker ps --format '{{.ID}} {{.Ports}}' | grep '0.0.0.0:8080' | awk '{print $1}' | xargs -r docker rm -f
 done
