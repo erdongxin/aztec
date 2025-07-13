@@ -62,6 +62,10 @@ while true; do
         rm -rf "$DATA_DIR"
         echo -e "\033[0;32m数据目录已删除，10秒后重启节点...\033[0m"
         sleep 10
+    elif [ $exit_code -eq 139 ]; then
+        echo -e "\033[0;31m[$(date '+%Y-%m-%d %H:%M:%S')] 内存溢出 (退出码: $exit_code)\033[0m"
+        echo -e "\033[0;34m10秒后尝试重新启动节点...\033[0m"
+        sleep 10
     elif [ $exit_code -ne 0 ]; then
         echo -e "\033[0;31m[$(date '+%Y-%m-%d %H:%M:%S')] 节点异常退出 (退出码: $exit_code)\033[0m"
         upgrade_node
