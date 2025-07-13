@@ -81,8 +81,20 @@ while true; do
     
         # 2. 注入 NODE_OPTIONS 到 .aztec-run 的 ENV_VARS_TO_INJECT
         AZTEC_RUN_FILE="/root/.aztec/bin/.aztec-run"
+        INJECT_LINE='ENV_VARS_TO_INJECT+=" NODE_OPTIONS"'
+        
         if ! grep -q 'ENV_VARS_TO_INJECT.*NODE_OPTIONS' "$AZTEC_RUN_FILE"; then
-            sed -i '/arg_env_vars=(-e "HOME=\$HOME")/i ENV_VARS_TO_INJECT+=" NODE_OPTIONS"' "$AZTEC_RUN_FILE"
+            awk -v inject="$INJECT_LINE" '
+            BEGIN { inserted=0 }
+            {
+                print
+                if (!inserted && $0 ~ /arg_env_vars=\("-e" "HOME=\$HOME"\)/) {
+                    print inject
+                    inserted=1
+                }
+            }' "$AZTEC_RUN_FILE" > temp && mv temp "$AZTEC_RUN_FILE"
+            
+            chmod +x "$AZTEC_RUN_FILE"
             echo -e "\033[0;32m已注入 NODE_OPTIONS 到 .aztec-run 中的 ENV_VARS_TO_INJECT\033[0m"
         else
             echo -e "\033[0;32m.aztec-run 中已存在 NODE_OPTIONS 环境注入\033[0m"
