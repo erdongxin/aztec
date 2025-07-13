@@ -43,7 +43,6 @@ start_node() {
     export NODE_OPTIONS="--max-old-space-size=16384"
 
     aztec start --node --archiver --sequencer \
-        --env NODE_OPTIONS="--max-old-space-size=16384" \
         --network alpha-testnet \
         --l1-rpc-urls "$L1_RPC_URL" \
         --l1-consensus-host-urls "$BEACON_RPC" \
