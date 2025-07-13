@@ -64,8 +64,31 @@ while true; do
         sleep 10
     elif [ $exit_code -eq 139 ]; then
         echo -e "\033[0;31m[$(date '+%Y-%m-%d %H:%M:%S')] 内存溢出 (退出码: $exit_code)\033[0m"
-        echo -e "\033[0;34m10秒后尝试重新启动节点...\033[0m"
-        sleep 10
+
+        echo -e "\033[0;34m检查并修复内存参数配置...\033[0m"
+    
+        # 1. 修复 aztec 脚本中的 NODE_OPTIONS 设置
+        AZTEC_FILE="/root/.aztec/bin/aztec"
+        if ! grep -q 'export NODE_OPTIONS="--max-old-space-size=3072"' "$AZTEC_FILE"; then
+            echo 'export NODE_OPTIONS="--max-old-space-size=3072"' | cat - "$AZTEC_FILE" > temp && mv temp "$AZTEC_FILE"
+            chmod +x "$AZTEC_FILE"
+            echo -e "\033[0;32m已修复 aztec 文件中的 NODE_OPTIONS 设置\033[0m"
+        else
+            echo -e "\033[0;32maztec 文件中的 NODE_OPTIONS 已正确设置\033[0m"
+        fi
+    
+        # 2. 注入 NODE_OPTIONS 到 .aztec-run 的 ENV_VARS_TO_INJECT
+        AZTEC_RUN_FILE="/root/.aztec/bin/.aztec-run"
+        if ! grep -q 'ENV_VARS_TO_INJECT.*NODE_OPTIONS' "$AZTEC_RUN_FILE"; then
+            sed -i '/arg_env_vars=(-e "HOME=\$HOME")/i ENV_VARS_TO_INJECT+=" NODE_OPTIONS"' "$AZTEC_RUN_FILE"
+            echo -e "\033[0;32m已注入 NODE_OPTIONS 到 .aztec-run 中的 ENV_VARS_TO_INJECT\033[0m"
+        else
+            echo -e "\033[0;32m.aztec-run 中已存在 NODE_OPTIONS 环境注入\033[0m"
+        fi
+    
+        echo -e "\033[0;33m内存配置修复完成，5秒后重启脚本...\033[0m"
+        sleep 5
+        exec "$0"
     elif [ $exit_code -ne 0 ]; then
         echo -e "\033[0;31m[$(date '+%Y-%m-%d %H:%M:%S')] 节点异常退出 (退出码: $exit_code)\033[0m"
         upgrade_node
