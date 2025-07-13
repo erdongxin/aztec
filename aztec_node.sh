@@ -58,8 +58,8 @@ while true; do
     exit_code=$?
 
     if [ $exit_code -eq 1 ]; then
-        echo -e "\033[0;31m[$(date '+%Y-%m-%d %H:%M:%S')] 检测到状态码1，删除数据目录后重新同步...\033[0m"
-        echo -e "\033[0;33m删除数据目录 $DATA_DIR 中...\033[0m"
+        echo -e "\033[0;31m[$(date '+%Y-%m-%d %H:%M:%S')] 数据同步失败(退出码: $exit_code)\033[0m"
+        echo -e "\033[0;33m删除数据目录后重新同步...删除目录 $DATA_DIR 中...\033[0m"
         rm -rf "$DATA_DIR"
         echo -e "\033[0;32m数据目录已删除，10秒后重启节点...\033[0m"
         sleep 10
