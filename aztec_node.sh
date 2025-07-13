@@ -41,6 +41,7 @@ upgrade_node() {
 start_node() {
     echo -e "\033[0;34m[$(date '+%Y-%m-%d %H:%M:%S')] 正在启动节点...\033[0m"
     aztec start --node --archiver --sequencer \
+        --env NODE_OPTIONS="--max-old-space-size=16384" \
         --network alpha-testnet \
         --l1-rpc-urls "$L1_RPC_URL" \
         --l1-consensus-host-urls "$BEACON_RPC" \
