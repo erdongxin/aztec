@@ -29,6 +29,7 @@ register_validator() {
     --l1-rpc-urls "$L1_RPC_URL" \
     --private-key "$PRIVATE_KEY" \
     --attester "$COINBASE" \
+    --proposer-eoa "$COINBASE" \
     --staking-asset-handler "$STAKING_HANDLER" \
     --l1-chain-id "$CHAIN_ID"
 }
