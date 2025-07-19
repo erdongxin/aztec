@@ -37,7 +37,7 @@ while true; do
   OUTPUT=$(register_validator 2>&1)
   EXIT_CODE=$?
 
-  echo "$OUTPUT" | tee /dev/tty
+  echo "$OUTPUT" | tee -a /root/aztec_zhuce.log
 
   # 检查 CLI 报错是否为配额限制
   if echo "$OUTPUT" | grep -q "ValidatorQuotaFilledUntil("; then
