@@ -96,7 +96,7 @@ EOF
 }
 
 # === 注册执行逻辑 ===
-OUTPUT=$(register_validator_cli | tee /dev/tty)
+OUTPUT=$(register_validator_high_gas | tee /dev/tty)
 
 if echo "$OUTPUT" | grep -q "ValidatorQuotaFilledUntil("; then
   TS=$(echo "$OUTPUT" | grep -oP 'ValidatorQuotaFilledUntil\(\K[0-9]+' | head -n1)
