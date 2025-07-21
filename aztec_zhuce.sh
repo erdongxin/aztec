@@ -1,6 +1,8 @@
 #!/bin/bash
 
 command -v aztec >/dev/null 2>&1 || { echo "❌ 未找到 aztec 命令，请确保已正确安装 aztec-cli"; exit 1; }
+command -v node >/dev/null 2>&1 || { echo "❌ 未找到 Node.js，请先安装 Node.js"; exit 1; }
+
 echo "=== aztec_zhuce.sh 脚本启动 ==="
 
 set -e
@@ -16,13 +18,13 @@ if [[ -z "$L1_RPC_URL" || -z "$COINBASE" || -z "$PRIVATE_KEY" ]]; then
   exit 1
 fi
 
-# 参数
 STAKING_HANDLER="0xF739D03e98e23A7B65940848aBA8921fF3bAc4b2"
 CHAIN_ID=11155111
+FORWARDER="0x44bF76535F0a7FA302D17edB331EB61eD705129d"
 
-# 注册函数
-register_validator() {
-  echo "🚀 正在尝试注册 Aztec L1 Validator... ($(date))"
+# 标准 aztec-cli 注册方法
+register_validator_cli() {
+  echo "📦 使用 aztec-cli 注册中..."
   aztec add-l1-validator \
     --l1-rpc-urls "$L1_RPC_URL" \
     --private-key "$PRIVATE_KEY" \
@@ -32,10 +34,51 @@ register_validator() {
     --l1-chain-id "$CHAIN_ID"
 }
 
-# 执行注册并输出显示
-OUTPUT=$(register_validator | tee /dev/tty)
+# 高 gas 自定义注册（内嵌 node 脚本）
+register_validator_high_gas() {
+  echo "⚙️ 使用 ethers.js 高 gas 注册器..."
 
-# 解析 ValidatorQuotaFilledUntil 错误中的时间戳
+  node <<EOF
+const { ethers } = require("ethers");
+
+const RPC_URL = "${L1_RPC_URL}";
+const PRIVATE_KEY = "${PRIVATE_KEY}";
+const COINBASE = "${COINBASE}";
+const CONTRACT_ADDRESS = "${STAKING_HANDLER}";
+const CHAIN_ID = ${CHAIN_ID};
+const FORWARDER = "${FORWARDER}";
+
+const ABI = [
+  "function addValidator(address attester, address proposer, address forwarder)"
+];
+
+(async () => {
+  const provider = new ethers.JsonRpcProvider(RPC_URL, CHAIN_ID);
+  const wallet = new ethers.Wallet(PRIVATE_KEY, provider);
+  const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, wallet);
+
+  const gasLimit = 12000000;
+  const gasPrice = ethers.parseUnits("4500", "gwei"); // 高 gas，必要时可改大
+
+  try {
+    console.log("🚀 正在发送 addValidator...");
+    const tx = await contract.addValidator(COINBASE, COINBASE, FORWARDER, {
+      gasLimit,
+      gasPrice,
+    });
+    console.log("✅ 已发送 TX:", tx.hash);
+    const receipt = await tx.wait();
+    console.log("🎉 成功确认! Block:", receipt.blockNumber);
+  } catch (err) {
+    console.error("❌ 自定义注册失败:", err.message || err);
+  }
+})();
+EOF
+}
+
+# 先用 aztec-cli 尝试
+OUTPUT=$(register_validator_cli | tee /dev/tty)
+
 if echo "$OUTPUT" | grep -q "ValidatorQuotaFilledUntil("; then
   TS=$(echo "$OUTPUT" | grep -oP 'ValidatorQuotaFilledUntil\(\K[0-9]+' | head -n1)
 
@@ -49,8 +92,8 @@ if echo "$OUTPUT" | grep -q "ValidatorQuotaFilledUntil("; then
   WAIT=$((TS - NOW - 5))
 
   if [ "$WAIT" -le 0 ]; then
-    echo "⚠️ 配额时间已到或过期，立即重试注册..."
-    register_validator
+    echo "⚠️ 配额时间已到或过期，立即重试注册（高 gas）..."
+    register_validator_high_gas
     exit 0
   fi
 
@@ -76,11 +119,11 @@ if echo "$OUTPUT" | grep -q "ValidatorQuotaFilledUntil("; then
     fi
   done
 
-  echo "🔁 尝试重新注册 Validator ($(date))"
-  register_validator
+  echo "🔁 尝试使用高优先级注册 Validator ($(date))"
+  register_validator_high_gas
 else
-
-  WECHAT_MSG="Aztec 验证者注册成功！！！！！！！！！！\n 成功时间：$(date)\n 注册地址：$COINBASE"
+  # 成功直接发通知
+  WECHAT_MSG="🎉 Aztec 注册成功！！\n时间：$(date)\n地址：$COINBASE"
   curl "$WEBHOOK" \
     -H 'Content-Type: application/json' \
     -d '{
