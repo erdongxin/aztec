@@ -80,7 +80,7 @@ const ABI = [
   const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, wallet);
 
   const gasLimit = 12000000;
-  const gasPrice = ethers.parseUnits("90", "gwei"); // 自定义 gas
+  const gasPrice = ethers.parseUnits("658", "gwei"); // 自定义 gas
 
   try {
     console.log("🚀 正在发送 addValidator...");
