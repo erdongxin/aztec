@@ -19,6 +19,11 @@ else
   echo "✅ Node.js 已安装：$(node -v)"
 fi
 
+if ! npm list ethers >/dev/null 2>&1; then
+  echo "📦 安装 ethers 模块中..."
+  npm install ethers
+fi
+
 # === 检查 aztec-cli 是否存在 ===
 if ! command -v aztec &> /dev/null; then
   echo "❌ 未找到 aztec 命令，请确保已正确安装 aztec-cli"
