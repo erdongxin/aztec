@@ -99,7 +99,7 @@ EOF
 OUTPUT=$(register_validator_cli | tee /dev/tty)
 
 if echo "$OUTPUT" | grep -q "ValidatorQuotaFilledUntil("; then
-  TS=$(echo "$OUTPUT" | grep -oP 'ValidatorQuotaFilledUntil\(\K[0-9]+')
+  TS=$(echo "$OUTPUT" | grep -oP 'ValidatorQuotaFilledUntil\(\K[0-9]+' | head -n1)
 
   if [[ -z "$TS" ]]; then
     echo "❌ 无法解析 ValidatorQuotaFilledUntil 时间戳"
