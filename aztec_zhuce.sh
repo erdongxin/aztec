@@ -23,7 +23,7 @@ CHAIN_ID=11155111
 # 注册函数
 register_validator() {
   echo "🚀 正在尝试注册 Aztec L1 Validator... ($(date))"
-  aztec add-l1-validator \
+  VERSION=0.87.9 aztec add-l1-validator \
     --l1-rpc-urls "$L1_RPC_URL" \
     --private-key "$PRIVATE_KEY" \
     --attester "$COINBASE" \
