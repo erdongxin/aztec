@@ -6,6 +6,8 @@ command -v node >/dev/null 2>&1 || { echo "❌ 未找到 Node.js，请先安装 
 echo "=== aztec_zhuce.sh 脚本启动 ==="
 
 set -e
+LOG_FILE="/root/aztec_zhuce.log"
+exec > >(tee -a "$LOG_FILE") 2>&1
 
 ENV_FILE="/root/aztec.env"
 WEBHOOK="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=20745fb3-d024-4856-9b95-4c97f3f283c8"
