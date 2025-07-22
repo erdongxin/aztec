@@ -7,7 +7,7 @@ set -e
 LOG_FILE="/root/aztec_zhuce.log"
 exec > >(tee -a "$LOG_FILE") 2>&1
 
-# 时间格式化函数，自动适配时区（默认服务器本地时区或环境变量TZ）
+# 自动时区适配，中文格式时间输出
 format_time() {
   local ts=$1
   if [[ -z "$TZ" ]]; then
@@ -17,6 +17,7 @@ format_time() {
   fi
 }
 
+# 环境检查
 if ! command -v node &> /dev/null; then
   echo "🔧 正在安装 Node.js..."
   sudo apt update
@@ -32,9 +33,9 @@ if ! command -v aztec &> /dev/null; then
   exit 1
 fi
 
+# 读取环境变量
 ENV_FILE="/root/aztec.env"
 WEBHOOK="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=20745fb3-d024-4856-9b95-4c97f3f283c8"
-
 source <(grep '=' "$ENV_FILE" | sed 's/ *= */=/g')
 
 if [[ -z "$L1_RPC_URL" || -z "$COINBASE" || -z "$PRIVATE_KEY" ]]; then
@@ -102,59 +103,53 @@ const ABI = [
 EOF
 }
 
+# 注册循环逻辑
 while true; do
   OUTPUT=$(register_validator_cli | tee /dev/tty)
 
   if echo "$OUTPUT" | grep -q "ValidatorQuotaFilledUntil("; then
-    TS=$(echo "$OUTPUT" | grep -oP 'ValidatorQuotaFilledUntil\(\K[0-9]+' | head -n1 | tr -d '\r\n')
-
-    if [[ -z "$TS" ]]; then
-      echo "❌ 无法解析 ValidatorQuotaFilledUntil 时间戳"
-      echo "$OUTPUT"
-      exit 1
-    fi
+    TS=$(echo "$OUTPUT" | grep -oP 'ValidatorQuotaFilledUntil\(\K[0-9]+' | head -n1)
 
     NOW=$(date +%s)
-    WAIT=$((TS - NOW - 1))  # 提前 1 秒
-    [[ $WAIT -lt 0 ]] && WAIT=0
+    DIFF=$((NOW - TS))
 
-    AT=$(format_time "$TS")
-    CURRENT=$(format_time "$NOW")
+    if (( DIFF > 60 )); then
+      echo "⚠️ 当前时间比配额释放晚了超过 1 分钟，可能错过注册，休息 1 小时后再试..."
+      sleep 3600
+      continue
+    fi
 
-    echo "⏳ 当前时间：$CURRENT"
-    echo "⌛ 配额释放时间：$AT"
+    WAIT=$((TS - NOW - 1))
+    (( WAIT < 0 )) && WAIT=0
+
+    echo "⏳ 当前时间：$(format_time "$NOW")"
+    echo "⌛ 配额释放时间：$(format_time "$TS")"
     echo "🕐 等待 $WAIT 秒后尝试高 gas 注册（提前 1 秒）..."
-
     sleep "$WAIT"
 
-    # 高 gas 尝试注册
     if register_validator_high_gas; then
-      WECHAT_MSG="🎉 Aztec 高 gas 注册成功！！\n时间：$(format_time $(date +%s))\n地址：$COINBASE"
       curl "$WEBHOOK" \
         -H 'Content-Type: application/json' \
         -d '{
           "msgtype": "markdown",
           "markdown": {
-            "content": "'"$WECHAT_MSG"'"
+            "content": "🎉 Aztec 高 gas 注册成功！\n时间：'"$(format_time $(date +%s))"'\n地址：'"$COINBASE"'"
           }
         }'
-      echo "✅ 注册成功，退出循环。"
+      echo "✅ 高 gas 注册成功，退出脚本。"
       exit 0
     else
-      echo "❌ 高 gas 注册失败，回退尝试普通注册..."
-      # 这里直接继续循环，会再次调用 register_validator_cli
+      echo "❌ 高 gas 注册失败，继续下一轮循环..."
     fi
   else
-    WECHAT_MSG="🎉 Aztec 普通注册成功！！\n时间：$(format_time $(date +%s))\n地址：$COINBASE"
     curl "$WEBHOOK" \
       -H 'Content-Type: application/json' \
       -d '{
         "msgtype": "markdown",
         "markdown": {
-          "content": "'"$WECHAT_MSG"'"
+          "content": "🎉 Aztec 普通注册成功！\n时间：'"$(format_time $(date +%s))"'\n地址：'"$COINBASE"'"
         }
       }'
-
     echo "✅ 普通注册成功，退出脚本。"
     exit 0
   fi
