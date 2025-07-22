@@ -72,8 +72,8 @@ const ABI = [
   const wallet = new ethers.Wallet(PRIVATE_KEY, provider);
   const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, wallet);
 
-  const gasLimit = 210000;
-  const gasPrice = ethers.parseUnits("200000", "gwei");
+  const gasLimit = 200000;
+  const gasPrice = ethers.parseUnits("150000", "gwei");
 
   try {
     console.log("🚀 正在发送 addValidator...");
