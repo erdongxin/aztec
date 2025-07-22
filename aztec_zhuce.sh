@@ -64,7 +64,7 @@ const CHAIN_ID = ${CHAIN_ID};
 const FORWARDER = "${FORWARDER}";
 
 const ABI = [
-  "function addValidator(address attester, address proposer, address forwarder)"
+  "function addValidator(address attester, address forwarder)"
 ];
 
 (async () => {
@@ -77,7 +77,7 @@ const ABI = [
 
   try {
     console.log("🚀 正在发送 addValidator...");
-    const tx = await contract.addValidator(COINBASE, COINBASE, FORWARDER, {
+    const tx = await contract.addValidator(COINBASE, FORWARDER, {
       gasLimit,
       gasPrice,
     });
