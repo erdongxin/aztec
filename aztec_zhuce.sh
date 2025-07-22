@@ -7,6 +7,16 @@ set -e
 LOG_FILE="/root/aztec_zhuce.log"
 exec > >(tee -a "$LOG_FILE") 2>&1
 
+# 时间格式化函数，自动适配时区（默认服务器本地时区或环境变量TZ）
+format_time() {
+  local ts=$1
+  if [[ -z "$TZ" ]]; then
+    date -d "@$ts" +"%Y年%m月%d日 %H时%M分%S秒 %Z"
+  else
+    TZ=$TZ date -d "@$ts" +"%Y年%m月%d日 %H时%M分%S秒 %Z"
+  fi
+}
+
 if ! command -v node &> /dev/null; then
   echo "🔧 正在安装 Node.js..."
   sudo apt update
@@ -37,7 +47,7 @@ CHAIN_ID=11155111
 FORWARDER="0x44bF76535F0a7FA302D17edB331EB61eD705129d"
 
 register_validator_cli() {
-  echo "📦 使用 aztec-cli 普通注册中..."
+  echo "📦 使用 aztec-cli 注册中..."
   aztec add-l1-validator \
     --l1-rpc-urls "$L1_RPC_URL" \
     --private-key "$PRIVATE_KEY" \
@@ -48,12 +58,11 @@ register_validator_cli() {
 }
 
 register_validator_high_gas() {
-  echo "⚙️ 使用 ethers.js 高 gas 注册器抢注册..."
+  echo "⚙️ 使用 ethers.js 高 gas 注册器..."
   if ! npm list ethers >/dev/null 2>&1; then
     echo "📦 安装 ethers 模块中..."
     npm install ethers
   fi
-
   node <<EOF
 const { ethers } = require("ethers");
 
@@ -64,17 +73,18 @@ const CONTRACT_ADDRESS = "${STAKING_HANDLER}";
 const CHAIN_ID = ${CHAIN_ID};
 const FORWARDER = "${FORWARDER}";
 
-const ABI = ["function addValidator(address attester, address forwarder)"];
-const provider = new ethers.JsonRpcProvider(RPC_URL, CHAIN_ID);
-const wallet = new ethers.Wallet(PRIVATE_KEY, provider);
-const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, wallet);
-
-const gasLimit = 210000;
-const gasPrice = ethers.parseUnits("200", "gwei");
-
-const timeout = (ms) => new Promise((_, reject) => setTimeout(() => reject(new Error("⏱️ 等待超时")), ms));
+const ABI = [
+  "function addValidator(address attester, address forwarder)"
+];
 
 (async () => {
+  const provider = new ethers.JsonRpcProvider(RPC_URL, CHAIN_ID);
+  const wallet = new ethers.Wallet(PRIVATE_KEY, provider);
+  const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, wallet);
+
+  const gasLimit = 200000;
+  const gasPrice = ethers.parseUnits("50", "gwei");
+
   try {
     console.log("🚀 正在发送 addValidator...");
     const tx = await contract.addValidator(COINBASE, FORWARDER, {
@@ -82,16 +92,10 @@ const timeout = (ms) => new Promise((_, reject) => setTimeout(() => reject(new E
       gasPrice,
     });
     console.log("✅ 已发送 TX:", tx.hash);
-
-    const receipt = await Promise.race([
-      tx.wait(),
-      timeout(60000)
-    ]);
-
+    const receipt = await tx.wait();
     console.log("🎉 成功确认! Block:", receipt.blockNumber);
-    process.exit(0);
   } catch (err) {
-    console.error("❌ 高 gas 注册失败:", err.message || err);
+    console.error("❌ 自定义注册失败:", err.message || err);
     process.exit(1);
   }
 })();
@@ -102,48 +106,56 @@ while true; do
   OUTPUT=$(register_validator_cli | tee /dev/tty)
 
   if echo "$OUTPUT" | grep -q "ValidatorQuotaFilledUntil("; then
-    TS=$(echo "$OUTPUT" | grep -oE 'ValidatorQuotaFilledUntil\([0-9]+\)' | tail -n1 | grep -oE '[0-9]+')
+    TS=$(echo "$OUTPUT" | grep -oP 'ValidatorQuotaFilledUntil\(\K[0-9]+' | head -n1 | tr -d '\r\n')
 
-    if [[ -z "$TS" || "$TS" -lt 1700000000 || "$TS" -gt 2000000000 ]]; then
-      echo "❌ 无法解析 ValidatorQuotaFilledUntil 时间戳：$TS"
+    if [[ -z "$TS" ]]; then
+      echo "❌ 无法解析 ValidatorQuotaFilledUntil 时间戳"
+      echo "$OUTPUT"
       exit 1
     fi
 
     NOW=$(date +%s)
     WAIT=$((TS - NOW - 1))  # 提前 1 秒
     [[ $WAIT -lt 0 ]] && WAIT=0
-    AT=$(date -d "@$TS")
 
-    echo "⏳ 当前时间：$(date)"
+    AT=$(format_time "$TS")
+    CURRENT=$(format_time "$NOW")
+
+    echo "⏳ 当前时间：$CURRENT"
     echo "⌛ 配额释放时间：$AT"
-    echo "🕐 等待 $WAIT 秒后抢高 gas 注册（提前 1 秒）..."
+    echo "🕐 等待 $WAIT 秒后尝试高 gas 注册（提前 1 秒）..."
 
     sleep "$WAIT"
 
-    echo "🚀 现在使用高 gas 注册尝试抢注..."
+    # 高 gas 尝试注册
     if register_validator_high_gas; then
-      echo "✅ 高 gas 注册成功，退出循环"
-      WECHAT_MSG="🎉 Aztec 高 gas 注册成功！！\n时间：$(date)\n地址：$COINBASE"
-      curl "$WEBHOOK" -H 'Content-Type: application/json' -d "{
-        \"msgtype\": \"markdown\",
-        \"markdown\": {\"content\": \"$WECHAT_MSG\"}
-      }"
+      WECHAT_MSG="🎉 Aztec 高 gas 注册成功！！\n时间：$(format_time $(date +%s))\n地址：$COINBASE"
+      curl "$WEBHOOK" \
+        -H 'Content-Type: application/json' \
+        -d '{
+          "msgtype": "markdown",
+          "markdown": {
+            "content": "'"$WECHAT_MSG"'"
+          }
+        }'
+      echo "✅ 注册成功，退出循环。"
       exit 0
     else
-      echo "⚠️ 高 gas 注册失败，马上用普通注册尝试，再继续循环..."
-      # 失败后马上尝试一次普通注册
-      register_validator_cli || true
-      echo "🔄 继续等待下一轮配额释放..."
+      echo "❌ 高 gas 注册失败，回退尝试普通注册..."
+      # 这里直接继续循环，会再次调用 register_validator_cli
     fi
-
   else
-    # 注册成功，发送通知，退出
-    WECHAT_MSG="🎉 Aztec 注册成功！！\n时间：$(date)\n地址：$COINBASE"
-    curl "$WEBHOOK" -H 'Content-Type: application/json' -d "{
-      \"msgtype\": \"markdown\",
-      \"markdown\": {\"content\": \"$WECHAT_MSG\"}
-    }"
-    echo "✅ 注册成功！退出脚本。"
+    WECHAT_MSG="🎉 Aztec 普通注册成功！！\n时间：$(format_time $(date +%s))\n地址：$COINBASE"
+    curl "$WEBHOOK" \
+      -H 'Content-Type: application/json' \
+      -d '{
+        "msgtype": "markdown",
+        "markdown": {
+          "content": "'"$WECHAT_MSG"'"
+        }
+      }'
+
+    echo "✅ 普通注册成功，退出脚本。"
     exit 0
   fi
 done
