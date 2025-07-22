@@ -95,7 +95,7 @@ EOF
 OUTPUT=$(register_validator_cli | tee /dev/tty)
 
 if echo "$OUTPUT" | grep -q "ValidatorQuotaFilledUntil("; then
-  TS=$(echo "$OUTPUT" | grep -oP 'ValidatorQuotaFilledUntil\(\K[0-9]+')
+  TS=$(echo "$OUTPUT" | grep -oP 'ValidatorQuotaFilledUntil\(\K[0-9]+' | head -n 1)
   NOW=$(date +%s)
   WAIT=$((TS - NOW))
   AT=$(date -d "@$TS" "+%Y-%m-%d %H:%M:%S")
