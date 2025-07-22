@@ -95,31 +95,32 @@ EOF
 OUTPUT=$(register_validator_cli | tee /dev/tty)
 
 if echo "$OUTPUT" | grep -q "ValidatorQuotaFilledUntil("; then
-  TS=$(echo "$OUTPUT" | grep -oP 'ValidatorQuotaFilledUntil\(\K[0-9]+' | head -n 1)
-  NOW=$(date +%s)
-  WAIT=$((TS - NOW))
-  AT=$(date -d "@$TS" "+%Y-%m-%d %H:%M:%S")
+  TS=$(echo "$OUTPUT" | grep -oP 'ValidatorQuotaFilledUntil\(\K[0-9]+' | head -n1 | tr -d '\r\n')
 
-  if [ "$WAIT" -le 3 ]; then
-    echo "⚠️ 配额将在 $WAIT 秒内释放，准备立即注册..."
-    sleep "$WAIT"
-    register_validator_high_gas
-    exit 0
+  if [[ -z "$TS" ]]; then
+    echo "❌ 无法解析 ValidatorQuotaFilledUntil 时间戳"
+    echo "$OUTPUT"
+    exit 1
   fi
 
+  NOW=$(date +%s)
+  WAIT=$((TS - NOW - 1))  # 提前 1 秒
+
+  # 避免负数
+  if [ "$WAIT" -lt 0 ]; then
+    WAIT=0
+  fi
+
+  AT=$(date -d "@$TS")
   echo "⏳ 当前时间：$(date)"
   echo "⌛ 配额释放时间：$AT"
-  echo "🕐 等待 $WAIT 秒..."
+  echo "🕐 等待 $WAIT 秒后注册（提前 1 秒）..."
 
-  while [ "$WAIT" -gt 3 ]; do
-    sleep 5
-    NOW=$(date +%s)
-    WAIT=$((TS - NOW))
-    echo "⏳ 剩余等待时间：$WAIT 秒"
-  done
+  sleep "$WAIT"
 
-  echo "⏰ 配额即将释放，执行注册..."
+  echo "🚀 提前 1 秒执行注册..."
   register_validator_high_gas
+  exit 0
 else
   WECHAT_MSG="🎉 Aztec 注册成功！！\n时间：$(date)\n地址：$COINBASE"
   curl "$WEBHOOK" \
