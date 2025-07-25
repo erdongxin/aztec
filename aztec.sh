@@ -92,11 +92,14 @@ show_menu() {
     echo "==================================================================="
     echo "====脚本由陈喜顺@Chancy59850326编写，Aztec节点控制台，免费开源===="
     echo "==================================================================="
-    echo "1. 启动节点"
-    echo "2. 查看日志"
-    echo "3. 删除节点"
-    echo "4. 配置变量"
-    echo "5. 退出"
+    echo "1. 运行序列器节点"
+    echo "2. 查看序列节点日志"
+    echo "3. 删除序列器节点"
+    echo "4. 运行证明者节点"
+    echo "5. 查看证明节点日志"
+    echo "6. 删除证明者节点"
+    echo "7. 配置环境变量"
+    echo "8. 退出"
     echo "==============================="
     read -p "请选择操作: " choice
 
@@ -123,11 +126,11 @@ show_menu() {
         curl -L https://raw.githubusercontent.com/erdongxin/aztec/refs/heads/main/aztec_node.sh -o /root/aztec_node.sh
         sleep 1
 
-        screen -ls | grep aztec_node | awk '{print $1}' | sed 's/\.aztec_node$//' | xargs -I {} screen -S {} -X quit
+        screen -ls | grep aztec | awk '{print $1}' | sed 's/\.aztec$//' | xargs -I {} screen -S {} -X quit
         docker ps -a --filter "name=aztec" -q | xargs --no-run-if-empty docker rm -f
 
         chmod +x aztec_node.sh && screen -dmS aztec_node bash aztec_node.sh
-        echo -e "${GREEN}[▶] 节点已启动，查看日志请使用 screen -r aztec_node ${RESET}"
+        echo -e "${GREEN}[▶] 序列器节点已启动，查看日志请使用 screen -r aztec_node ${RESET}"
 
         echo "按任意键返回主菜单..."
         read -n 1
@@ -145,7 +148,7 @@ show_menu() {
       3)
         screen -ls | grep aztec_node | awk '{print $1}' | sed 's/\.aztec_node$//' | xargs -I {} screen -S {} -X quit
         docker ps -a --filter "name=aztec" -q | xargs --no-run-if-empty docker rm -f
-        echo "已停止运行!"
+        echo "证明者节点 已停止运行!"
         rm -rf /root/aztec_node
         echo "数据已清空!"
 
@@ -153,11 +156,63 @@ show_menu() {
         read -n 1
         ;;
       4)
-        setup_aztec_env
+        install_docker
+        install_screen
+        install_jq
+        install_aztec
+
+        if [ ! -f "/root/aztec.env" ]; then
+          setup_aztec_env
+          echo -e "${GREEN}aztec.env文件已创建${RESET}"
+        else
+          echo -e "${GREEN}aztec.env文件已存在${RESET}"
+        fi
+        
+        # 添加环境变量
+        if ! grep -q 'aztec/bin' ~/.profile; then
+          echo 'export PATH="$HOME/.aztec/bin:$PATH"' >> ~/.profile
+        fi
+
+        # 下载脚本
+        curl -L https://raw.githubusercontent.com/erdongxin/aztec/refs/heads/main/aztec_prover.sh -o /root/aztec_prover.sh
+        sleep 1
+
+        # 退出所有节点
+        screen -ls | grep aztec | awk '{print $1}' | sed 's/\.aztec$//' | xargs -I {} screen -S {} -X quit
+        docker ps -a --filter "name=aztec" -q | xargs --no-run-if-empty docker rm -f
+
+        chmod +x aztec_prover.sh && screen -dmS aztec_prover bash aztec_prover.sh
+        echo -e "${GREEN}[▶] 证明者节点已启动，查看日志请使用 screen -r aztec_prover ${RESET}"
+
         echo "按任意键返回主菜单..."
         read -n 1
         ;;
       5)
+        if screen -ls | grep aztec_prover > /dev/null; then
+          echo "ctrl + A + D 安全退出日志"
+          screen -r aztec_prover
+        else
+          echo -e "${YELLOW}节点未运行${RESET}"
+        fi
+        echo "按任意键返回主菜单..."
+        read -n 1
+        ;;
+      6)
+        screen -ls | grep aztec_prover | awk '{print $1}' | sed 's/\.aztec_prover$//' | xargs -I {} screen -S {} -X quit
+        docker ps -a --filter "name=aztec" -q | xargs --no-run-if-empty docker rm -f
+        echo "证明者节点 已停止运行!"
+        rm -rf /root/aztec_prover
+        echo "数据已清空!"
+
+        echo "按任意键返回主菜单..."
+        read -n 1
+        ;;
+      7)
+        setup_aztec_env
+        echo "按任意键返回主菜单..."
+        read -n 1
+        ;;
+      8)
         exit 0
         ;;
       *)
