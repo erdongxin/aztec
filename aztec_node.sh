@@ -45,7 +45,7 @@ start_node() {
         --network alpha-testnet \
         --l1-rpc-urls "$L1_RPC_URL" \
         --l1-consensus-host-urls "$BEACON_RPC" \
-        --sequencer.validatorPrivateKey "$PRIVATE_KEY" \
+        --sequencer.validatorPrivateKeys "$PRIVATE_KEY" \
         --sequencer.coinbase "$COINBASE" \
         --p2p.p2pIp "$(curl -s ipv4.icanhazip.com)" \
         --data-directory "$DATA_DIR"
