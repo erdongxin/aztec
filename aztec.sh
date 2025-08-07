@@ -145,8 +145,8 @@ show_menu() {
       3)
         screen -ls | grep aztec_node | awk '{print $1}' | sed 's/\.aztec_node$//' | xargs -I {} screen -S {} -X quit
         docker ps -a --filter "name=aztec" -q | xargs --no-run-if-empty docker rm -f
-        echo "证明者节点 已停止运行!"
-        rm -rf /root/aztec_node
+        echo "序列器节点 已停止运行!"
+        rm -rf /root/.aztec_node
         echo "数据已清空!"
 
         echo "按任意键返回主菜单..."
