@@ -26,7 +26,7 @@ for var in "${required_vars[@]}"; do
     fi
 done
 
-# 升级函数
+# 升级节点
 upgrade_node() {
     echo -e "\033[0;33m尝试升级节点...\033[0m"
     aztec-up
@@ -37,10 +37,9 @@ upgrade_node() {
     fi
 }
 
-# 启动函数
+# 启动节点（后台运行）
 start_node() {
     echo -e "\033[0;34m[$(date '+%Y-%m-%d %H:%M:%S')] 正在启动节点...\033[0m"
-
     aztec start --node --archiver --sequencer \
         --network alpha-testnet \
         --l1-rpc-urls "$L1_RPC_URL" \
@@ -48,69 +47,122 @@ start_node() {
         --sequencer.validatorPrivateKeys "$PRIVATE_KEY" \
         --sequencer.coinbase "$COINBASE" \
         --p2p.p2pIp "$(curl -s ipv4.icanhazip.com)" \
-        --data-directory "$DATA_DIR"
-    return $?
+        --data-directory "$DATA_DIR" &
+    NODE_PID=$!
+    echo -e "\033[0;32m节点已启动 (PID=$NODE_PID)\033[0m"
 }
 
-# 主循环
-while true; do
-    start_node
-    exit_code=$?
+# 获取当前 aztec 容器 ID
+get_aztec_container() {
+    container_id=$(docker ps -q --filter "name=aztec-start")
+    echo "$container_id"
+}
 
-    if [ $exit_code -eq 1 ]; then
-        echo -e "\033[0;31m[$(date '+%Y-%m-%d %H:%M:%S')] 数据同步失败(退出码: $exit_code)\033[0m"
-        echo -e "\033[0;33m删除数据目录后重新同步...删除目录 $DATA_DIR 中...\033[0m"
-        rm -rf "$DATA_DIR"
-        echo -e "\033[0;32m数据目录已删除，10秒后重启节点...\033[0m"
-        sleep 10
-    elif [ $exit_code -eq 139 ]; then
-        echo -e "\033[0;31m[$(date '+%Y-%m-%d %H:%M:%S')] 内存溢出 (退出码: $exit_code)\033[0m"
-
-        echo -e "\033[0;34m检查并修复内存参数配置...\033[0m"
-    
-        # 1. 修复 aztec 脚本中的 NODE_OPTIONS 设置
-        AZTEC_FILE="/root/.aztec/bin/aztec"
-        if ! grep -q 'export NODE_OPTIONS="--max-old-space-size=3072"' "$AZTEC_FILE"; then
-            echo 'export NODE_OPTIONS="--max-old-space-size=3072"' | cat - "$AZTEC_FILE" > temp && mv temp "$AZTEC_FILE"
-            chmod +x "$AZTEC_FILE"
-            echo -e "\033[0;32m已修复 aztec 文件中的 NODE_OPTIONS 设置\033[0m"
-        else
-            echo -e "\033[0;32maztec 文件中的 NODE_OPTIONS 已正确设置\033[0m"
-        fi
-    
-        # 2. 注入 NODE_OPTIONS 到 .aztec-run 的 ENV_VARS_TO_INJECT
-        AZTEC_RUN_FILE="/root/.aztec/bin/.aztec-run"
-        INJECT_LINE='ENV_VARS_TO_INJECT+=" NODE_OPTIONS"'
-        
-        if ! grep -q 'ENV_VARS_TO_INJECT.*NODE_OPTIONS' "$AZTEC_RUN_FILE"; then
-            awk -v inject="$INJECT_LINE" '
-            BEGIN { inserted=0 }
-            {
-                print
-                if (!inserted && $0 ~ /arg_env_vars=\("-e" "HOME=\$HOME"\)/) {
-                    print inject
-                    inserted=1
-                }
-            }' "$AZTEC_RUN_FILE" > temp && mv temp "$AZTEC_RUN_FILE"
-            
-            chmod +x "$AZTEC_RUN_FILE"
-            echo -e "\033[0;32m已注入 NODE_OPTIONS 到 .aztec-run 中的 ENV_VARS_TO_INJECT\033[0m"
-        else
-            echo -e "\033[0;32m.aztec-run 中已存在 NODE_OPTIONS 环境注入\033[0m"
-        fi
-    
-        echo -e "\033[0;33m内存配置修复完成，5秒后重启脚本...\033[0m"
-        sleep 5
-    elif [ $exit_code -ne 0 ]; then
-        echo -e "\033[0;31m[$(date '+%Y-%m-%d %H:%M:%S')] 节点异常退出 (退出码: $exit_code)\033[0m"
-        upgrade_node
-        echo -e "\033[0;34m10秒后尝试重新启动节点...\033[0m"
-        sleep 10
-    else
-        echo -e "\033[0;32m[$(date '+%Y-%m-%d %H:%M:%S')] 节点正常退出，10秒后重启...\033[0m"
-        sleep 10
+# 区块同步检查
+check_block_sync() {
+    container_id=$(get_aztec_container)
+    if [ -z "$container_id" ]; then
+        echo -e "\033[0;31m节点未运行，调用 start_node...\033[0m"
+        start_node
+        return
     fi
 
-    # 删除占用的容器
-    docker ps --format '{{.ID}} {{.Ports}}' | grep '0.0.0.0:8080' | awk '{print $1}' | xargs -r docker rm -f
-done
+    # 最新区块，从日志倒序找第一个 "blockNumber"
+    latest_block=$(docker logs "$container_id" 2>&1 | tac | grep -m1 -Eo '"blockNumber":[0-9]+' | awk -F: '{print $2}')
+
+    # 本地区块，从日志倒序找第一个 "World state updated" 的 blockNumber
+    local_block=$(docker logs "$container_id" 2>&1 | tac | grep -m1 'World state updated' | grep -Eo '"blockNumber":[0-9]+' | awk -F: '{print $2}')
+
+    if [[ -n "$latest_block" && -n "$local_block" ]]; then
+        diff=$((latest_block - local_block))
+        echo -e "\033[0;36m[$(date '+%Y-%m-%d %H:%M:%S')] 最新区块: $latest_block, 本地区块: $local_block, 落后: $diff\033[0m"
+
+        if [ "$diff" -gt 10 ]; then
+            echo -e "\033[0;31m落后超过10个区块，正在重启节点...\033[0m"
+            docker rm -f "$container_id"
+            sleep 5
+            start_node
+        fi
+    else
+        echo -e "\033[0;33m无法从日志获取区块高度\033[0m"
+    fi
+}
+
+# 健康检查
+check_health() {
+    container_id=$(get_aztec_container)
+    if [ -z "$container_id" ]; then
+        return
+    fi
+
+    exit_code=$(docker inspect "$container_id" --format '{{.State.ExitCode}}')
+    status=$(docker inspect "$container_id" --format '{{.State.Status}}')
+
+    if [ "$status" == "exited" ]; then
+        echo -e "\033[0;31m容器退出 (退出码: $exit_code)\033[0m"
+
+        if [ "$exit_code" -eq 139 ]; then
+            echo -e "\033[0;31m检测到内存溢出，修复配置...\033[0m"
+            AZTEC_FILE="/root/.aztec/bin/aztec"
+            if ! grep -q 'export NODE_OPTIONS="--max-old-space-size=3072"' "$AZTEC_FILE"; then
+                echo 'export NODE_OPTIONS="--max-old-space-size=3072"' | cat - "$AZTEC_FILE" > temp && mv temp "$AZTEC_FILE"
+                chmod +x "$AZTEC_FILE"
+            fi
+            AZTEC_RUN_FILE="/root/.aztec/bin/.aztec-run"
+            INJECT_LINE='ENV_VARS_TO_INJECT+=" NODE_OPTIONS"'
+            if ! grep -q 'ENV_VARS_TO_INJECT.*NODE_OPTIONS' "$AZTEC_RUN_FILE"; then
+                awk -v inject="$INJECT_LINE" '
+                BEGIN { inserted=0 }
+                {
+                    print
+                    if (!inserted && $0 ~ /arg_env_vars=\("-e" "HOME=\$HOME"\)/) {
+                        print inject
+                        inserted=1
+                    }
+                }' "$AZTEC_RUN_FILE" > temp && mv temp "$AZTEC_RUN_FILE"
+                chmod +x "$AZTEC_RUN_FILE"
+            fi
+            sleep 5
+        elif [ "$exit_code" -eq 1 ]; then
+            echo -e "\033[0;33m同步失败，删除数据目录重启...\033[0m"
+            rm -rf "$DATA_DIR"
+            sleep 5
+        else
+            echo -e "\033[0;33m异常退出，尝试升级...\033[0m"
+            upgrade_node
+            sleep 5
+        fi
+
+        docker rm -f "$container_id"
+        start_node
+    else
+        echo -e "\033[0;32m[$(date '+%Y-%m-%d %H:%M:%S')] 节点正常运行，健康检查通过 (容器ID: $container_id)\033[0m"
+    fi
+}
+
+# -------------------------
+# 主程序
+# -------------------------
+
+# 初次启动节点
+initial_container=$(get_aztec_container)
+if [ -z "$initial_container" ]; then
+    start_node
+    # 等待容器创建
+    while [ -z "$(get_aztec_container)" ]; do
+        echo -e "\033[0;33m等待节点容器创建...\033[0m"
+        sleep 5
+    done
+fi
+
+# 启动检测线程
+(
+    while true; do
+        sleep 60
+        check_health
+        check_block_sync 
+    done
+) &
+
+# 等待节点前台输出，日志可见于screen
+wait $NODE_PID
