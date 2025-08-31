@@ -1,58 +1,45 @@
 #!/bin/bash
-# aztec_node.sh - 节点运行 + 健康检测 + 日志保持在 screen
-
-set -u
 export PATH="$HOME/.aztec/bin:$PATH"
 
-# -------- 配置 --------
+# 公共环境变量
 L1_CHAIN_ID=11155111
 STAKING_ASSET_HANDLER=0xF739D03e98e23A7B65940848aBA8921fF3bAc4b2
 NODE_NAME="aztec-node"
 DATA_DIR="/root/.$NODE_NAME"
+
+# 导入环境变量
 AZTEC_ENV="/root/aztec.env"
-
-# 检测参数
-LOG_TAIL_LINES=1000     # docker logs --tail N
-DOCKER_TIMEOUT=20       # docker logs 超时（秒）
-INSPECT_TIMEOUT=10      # docker inspect 超时（秒）
-CHECK_INTERVAL=120      # 区块检测间隔（秒）
-STUCK_THRESHOLD=10      # 本地区块连续 N 次不变 -> 认为卡住
-
-# -------- 工具函数 --------
-log() {
-    local color="$1"; shift
-    local ts; ts="$(date '+%Y-%m-%d %H:%M:%S')"
-    echo -e "\033[${color}m[${ts}] $*\033[0m"
-}
-
-# 导入环境
 if [ -f "$AZTEC_ENV" ]; then
     source "$AZTEC_ENV"
-    log 0 "成功导入环境变量文件"
+    echo -e "\033[0;32m成功导入环境变量文件\033[0m"
 else
-    log 31 "错误: 未找到环境变量文件 $AZTEC_ENV"
+    echo -e "\033[0;31m错误: 未找到环境变量文件 $AZTEC_ENV\033[0m"
     exit 1
 fi
 
-# 必要变量检查
+# 检查必要环境变量
 required_vars=("BEACON_RPC" "L1_RPC_URL" "PRIVATE_KEY" "COINBASE")
 for var in "${required_vars[@]}"; do
-    if [ -z "${!var:-}" ]; then
-        log 31 "错误: 环境变量 $var 未设置，请检查 $AZTEC_ENV"
+    if [ -z "${!var}" ]; then
+        echo -e "\033[0;31m错误: 环境变量 $var 未设置，请检查 aztec.env 文件。\033[0m"
         exit 1
     fi
 done
 
-TIMEOUT_CMD=$(command -v timeout || true)
-
-# -------- 管理函数 --------
+# 升级函数
 upgrade_node() {
-    aztec-up >/dev/null 2>&1
+    echo -e "\033[0;33m尝试升级节点...\033[0m"
+    aztec-up
+    if [ $? -eq 0 ]; then
+        echo -e "\033[0;32m✓ 节点升级成功\033[0m"
+    else
+        echo -e "\033[0;31m✗ 节点升级失败\033[0m"
+    fi
 }
 
+# 启动函数
 start_node() {
-    local c; c=$(get_aztec_container)
-    if [ -n "$c" ]; then return 0; fi
+    echo -e "\033[0;34m[$(date '+%Y-%m-%d %H:%M:%S')] 正在启动节点...\033[0m"
 
     aztec start --node --archiver --sequencer \
         --network alpha-testnet \
@@ -62,125 +49,106 @@ start_node() {
         --sequencer.coinbase "$COINBASE" \
         --p2p.p2pIp "$(curl -s ipv4.icanhazip.com)" \
         --data-directory "$DATA_DIR"
+    return $?
 }
 
-get_aztec_container() {
-    docker ps -q --filter "name=aztec-start" | head -n1 || true
-}
-
-# -------- 检测状态数据 --------
+# 全局变量
 LAST_LOCAL_BLOCK=""
 STUCK_COUNT=0
+CHECK_INTERVAL=60
+STUCK_THRESHOLD=10
+LOG_TAIL_LINES=1000
 
-# -------- 区块同步检测 --------
 check_block_sync() {
-    local container_id logs latest_block local_block diff
-    container_id=$(get_aztec_container)
-    if [ -z "$container_id" ]; then
-        log 31 "节点未运行，调用 start_node..."
-        start_node
-        return
-    fi
-
-    if [ -n "$TIMEOUT_CMD" ]; then
-        logs=$($TIMEOUT_CMD $DOCKER_TIMEOUT docker logs "$container_id" --tail "$LOG_TAIL_LINES" 2>&1 || true)
-    else
-        logs=$(docker logs "$container_id" --tail "$LOG_TAIL_LINES" 2>&1 || true)
-    fi
-
-    latest_block=$(echo "$logs" | grep -Eo '"blockNumber":[0-9]+' | tail -n1 | cut -d: -f2 || true)
-    local_block=$(echo "$logs" | grep 'World state updated' | grep -Eo '"blockNumber":[0-9]+' | tail -n1 | cut -d: -f2 || true)
-
-    if [[ "$latest_block" =~ ^[0-9]+$ && "$local_block" =~ ^[0-9]+$ ]]; then
-        diff=$((latest_block - local_block))
-        log 36 "最新区块: $latest_block, 本地区块: $local_block, 落后: $diff"
-
-        if [ "$local_block" = "$LAST_LOCAL_BLOCK" ]; then
-            STUCK_COUNT=$((STUCK_COUNT + 1))
-        else
-            STUCK_COUNT=0
-            LAST_LOCAL_BLOCK="$local_block"
+    while true; do
+        if [ ! -d "$DATA_DIR" ]; then
+            sleep "$CHECK_INTERVAL"
+            continue
         fi
 
-        if [ "$diff" -gt 10 ]; then
-            log 31 "落后超过10个区块（$diff），重启节点..."
-            docker rm -f "$container_id" >/dev/null 2>&1 || true
-            sleep 5
-            start_node
-        elif [ $STUCK_COUNT -ge $STUCK_THRESHOLD ]; then
-            log 31 "检测到本地区块连续 ${STUCK_COUNT} 次未变化，判断卡住，重启节点..."
-            docker rm -f "$container_id" >/dev/null 2>&1 || true
-            STUCK_COUNT=0
-            sleep 5
-            start_node
-        fi
-    else
-        log 33 "暂时无法从日志获取区块高度"
-        STUCK_COUNT=0
-    fi
-}
+        logs=$(tail -n "$LOG_TAIL_LINES" "$DATA_DIR"/aztec.log 2>/dev/null || true)
+        latest_block=$(echo "$logs" | grep -Eo '"blockNumber":[0-9]+' | tail -n1 | cut -d: -f2 || true)
+        local_block=$(echo "$logs" | grep 'World state updated' | grep -Eo '"blockNumber":[0-9]+' | tail -n1 | cut -d: -f2 || true)
 
-# -------- 健康检测 --------
-check_health() {
-    local container_id exit_code status
-    container_id=$(get_aztec_container)
-    if [ -z "$container_id" ]; then
-        start_node
-        return
-    fi
+        if [[ "$latest_block" =~ ^[0-9]+$ && "$local_block" =~ ^[0-9]+$ ]]; then
+            diff=$((latest_block - local_block))
+            echo -e "\033[0;36m[$(date '+%Y-%m-%d %H:%M:%S')] 最新区块: $latest_block, 本地区块: $local_block, 落后: $diff\033[0m"
 
-    if [ -n "$TIMEOUT_CMD" ]; then
-        exit_code=$($TIMEOUT_CMD $INSPECT_TIMEOUT docker inspect "$container_id" --format '{{.State.ExitCode}}' 2>/dev/null || echo "")
-        status=$($TIMEOUT_CMD $INSPECT_TIMEOUT docker inspect "$container_id" --format '{{.State.Status}}' 2>/dev/null || echo "")
-    else
-        exit_code=$(docker inspect "$container_id" --format '{{.State.ExitCode}}' 2>/dev/null || echo "")
-        status=$(docker inspect "$container_id" --format '{{.State.Status}}' 2>/dev/null || echo "")
-    fi
-
-    if [ "$status" = "exited" ]; then
-        if [ "$exit_code" -eq 139 ] 2>/dev/null; then
-            AZTEC_FILE="/root/.aztec/bin/aztec"
-            if [ -f "$AZTEC_FILE" ] && ! grep -q 'NODE_OPTIONS' "$AZTEC_FILE"; then
-                echo 'export NODE_OPTIONS="--max-old-space-size=3072"' | cat - "$AZTEC_FILE" > /tmp/.aztec_temp && mv /tmp/.aztec_temp "$AZTEC_FILE"
-                chmod +x "$AZTEC_FILE"
+            if [ "$local_block" = "$LAST_LOCAL_BLOCK" ]; then
+                STUCK_COUNT=$((STUCK_COUNT + 1))
+            else
+                STUCK_COUNT=0
+                LAST_LOCAL_BLOCK="$local_block"
             fi
-        elif [ "$exit_code" -eq 1 ] 2>/dev/null; then
-            rm -rf "$DATA_DIR"
-        else
-            upgrade_node
+
+            # 落后超过10块或卡住超过阈值，触发节点重启
+            if [ "$diff" -gt 10 ] || [ $STUCK_COUNT -ge $STUCK_THRESHOLD ]; then
+                echo -e "\033[0;31m[$(date '+%Y-%m-%d %H:%M:%S')] 区块同步异常，触发节点重启...\033[0m"
+                STUCK_COUNT=0
+                echo "节点卡住或落后，删除容器让主循环重启..."
+                docker ps --format '{{.ID}} {{.Ports}}' | grep '0.0.0.0:8080' | awk '{print $1}' | xargs -r docker rm -f
+            fi
         fi
-        docker rm -f "$container_id" >/dev/null 2>&1 || true
-        start_node
-    fi
-}
 
-# -------- 启动逻辑 --------
-initial_container=$(get_aztec_container)
-if [ -z "$initial_container" ]; then
-    start_node
-fi
-
-# 健康检测线程：无限循环，不输出日志
-(
-    while true; do
-        check_health
-    done
-) &
-
-# 区块同步检测线程：每隔 CHECK_INTERVAL 输出日志
-(
-    while true; do
-        check_block_sync
         sleep "$CHECK_INTERVAL"
     done
-) &
+}
 
-# -------- 前台日志保持在 screen --------
+# 启动后台区块同步检测
+check_block_sync &
+# 主循环：健康检测
 while true; do
-    container_id=$(get_aztec_container)
-    if [ -n "$container_id" ]; then
-        docker logs -f "$container_id"
-    else
+
+    # 节点启动
+    start_node
+    # 异常退出将会走修复流程
+    exit_code=$?
+
+    if [ $exit_code -eq 1 ]; then
+        echo -e "\033[0;31m[$(date '+%Y-%m-%d %H:%M:%S')] 数据同步失败(退出码: $exit_code)\033[0m"
+        echo -e "\033[0;33m删除数据目录后重新同步...删除目录 $DATA_DIR ...\033[0m"
+        rm -rf "$DATA_DIR"
+        echo -e "\033[0;32m数据目录已删除，10秒后重启节点...\033[0m"
+        sleep 10
+    elif [ $exit_code -eq 139 ]; then
+        echo -e "\033[0;31m[$(date '+%Y-%m-%d %H:%M:%S')] 内存溢出 (退出码: $exit_code)\033[0m"
+        echo -e "\033[0;34m检查并修复内存参数配置...\033[0m"
+
+        AZTEC_FILE="/root/.aztec/bin/aztec"
+        if ! grep -q 'export NODE_OPTIONS="--max-old-space-size=3072"' "$AZTEC_FILE"; then
+            echo 'export NODE_OPTIONS="--max-old-space-size=3072"' | cat - "$AZTEC_FILE" > temp && mv temp "$AZTEC_FILE"
+            chmod +x "$AZTEC_FILE"
+            echo -e "\033[0;32m已修复 aztec 文件中的 NODE_OPTIONS 设置\033[0m"
+        fi
+
+        AZTEC_RUN_FILE="/root/.aztec/bin/.aztec-run"
+        INJECT_LINE='ENV_VARS_TO_INJECT+=" NODE_OPTIONS"'
+        if ! grep -q 'ENV_VARS_TO_INJECT.*NODE_OPTIONS' "$AZTEC_RUN_FILE"; then
+            awk -v inject="$INJECT_LINE" '
+            BEGIN { inserted=0 }
+            {
+                print
+                if (!inserted && $0 ~ /arg_env_vars=\("-e" "HOME=\$HOME"\)/) {
+                    print inject
+                    inserted=1
+                }
+            }' "$AZTEC_RUN_FILE" > temp && mv temp "$AZTEC_RUN_FILE"
+            chmod +x "$AZTEC_RUN_FILE"
+            echo -e "\033[0;32m已注入 NODE_OPTIONS 到 .aztec-run 中\033[0m"
+        fi
+
+        echo -e "\033[0;33m内存配置修复完成，5秒后重启脚本...\033[0m"
         sleep 5
+    elif [ $exit_code -ne 0 ]; then
+        echo -e "\033[0;31m[$(date '+%Y-%m-%d %H:%M:%S')] 节点异常退出 (退出码: $exit_code)\033[0m"
+        upgrade_node
+        echo -e "\033[0;34m10秒后尝试重新启动节点...\033[0m"
+        sleep 10
+    else
+        echo -e "\033[0;32m[$(date '+%Y-%m-%d %H:%M:%S')] 节点正常退出，10秒后重启...\033[0m"
+        sleep 10
     fi
+
+    # 删除占用的容器（端口冲突）
+    docker ps --format '{{.ID}} {{.Ports}}' | grep '0.0.0.0:8080' | awk '{print $1}' | xargs -r docker rm -f
 done
