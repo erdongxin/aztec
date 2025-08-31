@@ -52,6 +52,11 @@ start_node() {
     return $?
 }
 
+# 获取 aztec 容器 ID
+get_aztec_container() {
+    docker ps -q --filter "name=aztec-start" | head -n1 || true
+}
+
 # 全局变量
 LAST_LOCAL_BLOCK=""
 STUCK_COUNT=0
@@ -60,13 +65,15 @@ STUCK_THRESHOLD=10
 LOG_TAIL_LINES=1000
 
 check_block_sync() {
+    local container_id
     while true; do
-        if [ ! -d "$DATA_DIR" ]; then
+        container_id=$(get_aztec_container)
+        if [ -z "$container_id" ]; then
             sleep "$CHECK_INTERVAL"
             continue
         fi
 
-        logs=$(tail -n "$LOG_TAIL_LINES" "$DATA_DIR"/aztec.log 2>/dev/null || true)
+        logs=$(docker logs --tail "$LOG_TAIL_LINES" "$container_id" 2>&1 || true)
         latest_block=$(echo "$logs" | grep -Eo '"blockNumber":[0-9]+' | tail -n1 | cut -d: -f2 || true)
         local_block=$(echo "$logs" | grep 'World state updated' | grep -Eo '"blockNumber":[0-9]+' | tail -n1 | cut -d: -f2 || true)
 
@@ -81,12 +88,11 @@ check_block_sync() {
                 LAST_LOCAL_BLOCK="$local_block"
             fi
 
-            # 落后超过10块或卡住超过阈值，触发节点重启
+            # 落后超过10块或卡住超过阈值，删除容器触发主循环重启
             if [ "$diff" -gt 10 ] || [ $STUCK_COUNT -ge $STUCK_THRESHOLD ]; then
-                echo -e "\033[0;31m[$(date '+%Y-%m-%d %H:%M:%S')] 区块同步异常，触发节点重启...\033[0m"
+                echo -e "\033[0;31m[$(date '+%Y-%m-%d %H:%M:%S')] 区块同步异常，删除容器触发主循环重启...\033[0m"
                 STUCK_COUNT=0
-                echo "节点卡住或落后，删除容器让主循环重启..."
-                docker ps --format '{{.ID}} {{.Ports}}' | grep '0.0.0.0:8080' | awk '{print $1}' | xargs -r docker rm -f
+                docker rm -f "$container_id" >/dev/null 2>&1 || true
             fi
         fi
 
@@ -94,8 +100,8 @@ check_block_sync() {
     done
 }
 
-# 启动后台区块同步检测
 check_block_sync &
+
 # 主循环：健康检测
 while true; do
 
