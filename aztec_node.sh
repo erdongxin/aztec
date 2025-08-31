@@ -69,11 +69,11 @@ check_block_sync() {
             return
         fi
 
-        # 限制日志范围，防止超大输出
-        logs=$(docker logs "$container_id" --tail 1000 2>&1)
+        # 拉取最近 1000 行日志，设置超时防止阻塞
+        logs=$(timeout 20 docker logs "$container_id" --tail 1000 2>&1 || echo "")
 
-        latest_block=$(echo "$logs" | tac | grep -m1 -Eo '"blockNumber":[0-9]+' | awk -F: '{print $2}')
-        local_block=$(echo "$logs" | tac | grep -m1 'World state updated' | grep -Eo '"blockNumber":[0-9]+' | awk -F: '{print $2}')
+        latest_block=$(echo "$logs" | grep -E '"blockNumber":[0-9]+' | tail -n 1 | awk -F: '{print $2}')
+        local_block=$(echo "$logs" | grep 'World state updated' | grep -Eo '"blockNumber":[0-9]+' | tail -n 1 | awk -F: '{print $2}')
 
         if [[ "$latest_block" =~ ^[0-9]+$ && "$local_block" =~ ^[0-9]+$ ]]; then
             diff=$((latest_block - local_block))
@@ -91,19 +91,23 @@ check_block_sync() {
     } || echo -e "\033[0;31mcheck_block_sync 执行出错，但脚本已忽略继续运行\033[0m"
 }
 
+
+# 健康检查
 # 健康检查
 check_health() {
     {
         container_id=$(get_aztec_container)
         if [ -z "$container_id" ]; then
+            echo -e "\033[0;31m[$(date '+%Y-%m-%d %H:%M:%S')] 未找到容器，节点可能未运行，调用 start_node...\033[0m"
+            start_node
             return
         fi
 
-        exit_code=$(docker inspect "$container_id" --format '{{.State.ExitCode}}' 2>/dev/null || echo "")
-        status=$(docker inspect "$container_id" --format '{{.State.Status}}' 2>/dev/null || echo "")
+        exit_code=$(timeout 10 docker inspect "$container_id" --format '{{.State.ExitCode}}' 2>/dev/null || echo "")
+        status=$(timeout 10 docker inspect "$container_id" --format '{{.State.Status}}' 2>/dev/null || echo "")
 
         if [ "$status" == "exited" ]; then
-            echo -e "\033[0;31m容器退出 (退出码: $exit_code)\033[0m"
+            echo -e "\033[0;31m[$(date '+%Y-%m-%d %H:%M:%S')] 容器退出 (退出码: $exit_code)\033[0m"
 
             if [ "$exit_code" -eq 139 ]; then
                 echo -e "\033[0;31m检测到内存溢出，修复配置...\033[0m"
@@ -137,14 +141,14 @@ check_health() {
                 sleep 5
             fi
 
-            docker rm -f "$container_id"
+            docker rm -f "$container_id" >/dev/null 2>&1 || true
             start_node
         else
             echo -e "\033[0;32m[$(date '+%Y-%m-%d %H:%M:%S')] 节点正常运行，健康检查通过 (容器ID: $container_id)\033[0m"
         fi
-
-    } || echo -e "\033[0;31mcheck_health 执行出错，但脚本已忽略继续运行\033[0m"
+    } || echo -e "\033[0;31m[$(date '+%Y-%m-%d %H:%M:%S')] check_health 执行出错，但脚本已忽略继续运行\033[0m"
 }
+
 
 # -------------------------
 # 主程序
