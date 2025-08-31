@@ -164,7 +164,6 @@ fi
 (
     while true; do
         check_health
-        sleep 5
     done
 ) &
 
