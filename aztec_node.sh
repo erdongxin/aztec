@@ -79,7 +79,7 @@ check_block_sync() {
 
         if [[ "$latest_block" =~ ^[0-9]+$ && "$local_block" =~ ^[0-9]+$ ]]; then
             diff=$((latest_block - local_block))
-            echo -e "\033[0;34m[$(date '+%H:%M:%S')] [BLOCK_SYNC] 最新区块: $latest_block, 本地区块: $local_block, 落后: $diff\033[0m"
+            printf "\033[0;34m[%s] [BLOCK_SYNC] 最新区块: %s, 本地区块: %s, 落后: %s\033[0m\n" "$(date '+%H:%M:%S')" "$latest_block" "$local_block" "$diff"
 
             if [ "$local_block" = "$LAST_LOCAL_BLOCK" ]; then
                 STUCK_COUNT=$((STUCK_COUNT + 1))
@@ -90,7 +90,7 @@ check_block_sync() {
 
             # 落后超过10块或卡住超过阈值，删除容器触发主循环重启
             if [ "$diff" -gt 10 ] || [ $STUCK_COUNT -ge $STUCK_THRESHOLD ]; then
-                echo -e "\033[0;31m[$(date '+%H:%M:%S')] [BLOCK_SYNC] 区块同步异常，删除容器触发主循环重启...\033[0m"
+                printf "\033[0;31m[$(date '+%H:%M:%S')] [BLOCK_SYNC] 区块同步异常，删除容器触发主循环重启...\033[0m"
                 STUCK_COUNT=0
                 docker rm -f "$container_id" >/dev/null 2>&1 || true
             fi
