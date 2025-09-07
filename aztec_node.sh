@@ -145,7 +145,7 @@ while true; do
 
         echo -e "\033[0;33m内存配置修复完成，5秒后重启脚本...\033[0m"
         sleep 5
-    elif [ $exit_code -ne 0 ]; then
+    elif [ $exit_code -ne 0 ] && [ $exit_code -ne 137 ]; then
         echo -e "\033[0;31m[$(date '+%Y-%m-%d %H:%M:%S')] 节点异常退出 (退出码: $exit_code)\033[0m"
         upgrade_node
         echo -e "\033[0;34m10秒后尝试重新启动节点...\033[0m"
