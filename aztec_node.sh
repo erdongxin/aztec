@@ -37,6 +37,34 @@ upgrade_node() {
     fi
 }
 
+# ====== 数据初始化 ======
+init_data() {
+    CACHE_DIR="/root/aztec-alpha-testnet"
+
+    if [ ! -d "$CACHE_DIR/data" ]; then
+        echo -e "\033[0;33m未检测到缓存数据，开始下载...\033[0m"
+        apt install -y lz4
+        wget https://files5.blacknodes.net/aztec/aztec-alpha-testnet.tar.lz4 -O /root/aztec-alpha-testnet.tar.lz4
+        mkdir -p "$CACHE_DIR"
+        lz4 -d /root/aztec-alpha-testnet.tar.lz4 | tar x -C "$CACHE_DIR"
+        rm /root/aztec-alpha-testnet.tar.lz4
+        echo -e "\033[0;32m缓存数据已就绪\033[0m"
+    else
+        echo -e "\033[0;32m检测到已有缓存数据，跳过下载\033[0m"
+    fi
+
+    # 恢复数据到节点目录
+    mkdir -p /root/.aztec-node
+    cp -r "$CACHE_DIR/data/"* /root/.aztec-node/
+    echo -e "\033[0;32m数据已恢复到节点目录\033[0m"
+}
+
+# 删除函数
+delete_node(){
+    docker ps -a --filter "name=aztec" -q | xargs --no-run-if-empty docker rm -f
+    rm -rf "$DATA_DIR"
+}
+
 # 启动函数
 start_node() {
     echo -e "\033[0;34m[$(date '+%Y-%m-%d %H:%M:%S')] 正在启动节点...\033[0m"
@@ -74,6 +102,16 @@ check_block_sync() {
         fi
 
         logs=$(docker logs --tail "$LOG_TAIL_LINES" "$container_id" 2>&1 || true)
+
+        # 检测是否存在“卡同步”日志
+        if echo "$logs" | grep -q "Unable to get blob sidecar for"; then
+            printf "\033[0;31m[%s] [BLOCK_SYNC] 检测到卡同步日志，执行修复...\033[0m\n" "$(date '+%H:%M:%S')"
+            delete_node
+            init_data
+            sleep "$CHECK_INTERVAL"
+            continue
+        fi
+
         latest_block=$(echo "$logs" | grep -Eo '"blockNumber":[0-9]+' | tail -n1 | cut -d: -f2 || true)
         local_block=$(echo "$logs" | grep 'World state updated' | grep -Eo '"blockNumber":[0-9]+' | tail -n1 | cut -d: -f2 || true)
 
@@ -90,7 +128,7 @@ check_block_sync() {
 
             # 落后超过10块或卡住超过阈值，删除容器触发主循环重启
             if [ "$diff" -gt 10 ] || [ $STUCK_COUNT -ge $STUCK_THRESHOLD ]; then
-                printf "\033[0;31m[$(date '+%H:%M:%S')] [BLOCK_SYNC] 区块同步异常，删除容器触发主循环重启...\033[0m"
+                printf "\033[0;31m[$(date '+%H:%M:%S')] [BLOCK_SYNC] 区块同步异常，删除容器触发主循环重启...\033[0m\n"
                 STUCK_COUNT=0
                 docker rm -f "$container_id" >/dev/null 2>&1 || true
             fi
@@ -113,7 +151,8 @@ while true; do
     if [ $exit_code -eq 1 ]; then
         echo -e "\033[0;31m[$(date '+%Y-%m-%d %H:%M:%S')] 数据同步失败(退出码: $exit_code)\033[0m"
         echo -e "\033[0;33m删除数据目录后重新同步...删除目录 $DATA_DIR ...\033[0m"
-        rm -rf "$DATA_DIR"
+        delete_node
+        init_data
         echo -e "\033[0;32m数据目录已删除，10秒后重启节点...\033[0m"
         sleep 10
     elif [ $exit_code -eq 139 ]; then
