@@ -70,6 +70,7 @@ install_aztec() {
 up_aztec(){
   echo -e "${GREEN}Aztec CLI 节点开始升级...${RESET}"
   aztec-up
+  echo -e "${GREEN}升级完成，当前版本 ${RESET}"
   aztec -V
 }
 
