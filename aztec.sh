@@ -158,7 +158,7 @@ show_menu() {
         read -n 1
         ;;
       4)
-        echo -e "${GREEN}首次投票，请确保你的rpc服务器已升级至新版本,出现{"jsonrpc":"2.0","id":1} 即为投票成功${RESET}"
+        echo -e "${GREEN}请确保你的rpc服务器已升级至新版本，并且aztec节点已成功启动，出现{"jsonrpc":"2.0","id":1} 即为投票成功${RESET}"
 
         echo -e "${GREEN}正在进行第一次投票${RESET}"
         docker exec -i $(docker ps -q --filter ancestor=aztecprotocol/aztec:latest) bash -c "curl -s -X POST http://localhost:8880 -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"method\":\"nodeAdmin_setConfig\",\"params\":[{\"governanceProposerPayload\":\"0x9D8869D17Af6B899AFf1d93F23f863FF41ddc4fa\"}],\"id\":1}'"
