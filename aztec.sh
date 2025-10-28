@@ -55,16 +55,21 @@ install_aztec() {
         echo -e "${RED}未检测到 Aztec CLI，正在安装...${RESET}"
         yes y | bash -i <(curl -s https://install.aztec.network)
 
-        # 添加环境变量到 PATH
-        if ! grep -q 'aztec/bin' ~/.bashrc; then
-            echo 'export PATH="$HOME/.aztec/bin:$PATH"' >> ~/.bashrc
-            source ~/.bashrc
+        # 添加环境变量
+        if ! grep -q 'aztec/bin' ~/.profile; then
+          echo 'export PATH="$HOME/.aztec/bin:$PATH"' >> ~/.profile
         fi
 
         echo -e "${GREEN}Aztec CLI 安装完成并配置环境变量。${RESET}"
     else
         echo -e "${GREEN}Aztec CLI 已安装${RESET}"
     fi
+}
+
+# 升级节点
+up_aztec(){
+  echo -e "${GREEN}Aztec CLI 节点开始升级...${RESET}"
+  aztec-up
 }
 
 # 检查并创建aztec.env文件
@@ -94,9 +99,11 @@ show_menu() {
     echo "==================================================================="
     echo "1. 运行序列器节点"
     echo "2. 查看序列节点日志"
-    echo "3. 删除序列器节点"
-    echo "4. 配置环境变量"
-    echo "5. 退出"
+    echo "3. 升级并重启节点"
+    echo "4. 节点发起投票"
+    echo "5. 删除序列器节点"
+    echo "6. 配置环境变量"
+    echo "7. 退出"
     echo "==============================="
     read -p "请选择操作: " choice
 
@@ -112,11 +119,6 @@ show_menu() {
           echo -e "${GREEN}aztec.env文件已创建${RESET}"
         else
           echo -e "${GREEN}aztec.env文件已存在${RESET}"
-        fi
-        
-        # 添加环境变量
-        if ! grep -q 'aztec/bin' ~/.profile; then
-          echo 'export PATH="$HOME/.aztec/bin:$PATH"' >> ~/.profile
         fi
 
         # 下载脚本
@@ -143,6 +145,31 @@ show_menu() {
         read -n 1
         ;;
       3)
+        screen -ls | grep aztec | awk '{print $1}' | sed 's/\.aztec$//' | xargs -I {} screen -S {} -X quit
+        docker ps -a --filter "name=aztec" -q | xargs --no-run-if-empty docker rm -f
+
+        up_aztec
+
+        chmod +x aztec_node.sh && screen -dmS aztec_node bash aztec_node.sh
+        echo -e "${GREEN}[▶] 序列器节点已重启，查看日志请使用 screen -r aztec_node ${RESET}"
+
+        echo "按任意键返回主菜单..."
+        read -n 1
+        ;;
+      4)
+        echo -e "${GREEN}首次投票，请确保你的rpc服务器已升级至新版本${RESET}"
+
+        echo -e "${GREEN}正在进行第一次投票{RESET}"
+        docker exec -i $(docker ps -q --filter ancestor=aztecprotocol/aztec:latest) bash -c "curl -s -X POST http://localhost:8880 -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"method\":\"nodeAdmin_setConfig\",\"params\":[{\"governanceProposerPayload\":\"0x9D8869D17Af6B899AFf1d93F23f863FF41ddc4fa\"}],\"id\":1}'"
+        sleep 3
+
+        echo -e "${GREEN}正在进行第二次投票${RESET}"
+        docker exec -i $(docker ps -q --filter ancestor=aztecprotocol/aztec:latest) bash -c "curl -s -X POST http://localhost:8880 -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"method\":\"nodeAdmin_setConfig\",\"params\":[{\"governanceProposerPayload\":\"0xDCd9DdeAbEF70108cE02576df1eB333c4244C666\"}],\"id\":1}'"
+
+        echo "出现{"jsonrpc":"2.0","id":1} 即为投票成功，按任意键返回主菜单..."
+        read -n 1
+        ;;
+      5)
         screen -ls | grep aztec_node | awk '{print $1}' | sed 's/\.aztec_node$//' | xargs -I {} screen -S {} -X quit
         docker ps -a --filter "name=aztec" -q | xargs --no-run-if-empty docker rm -f
         echo "序列器节点 已停止运行!"
@@ -152,12 +179,12 @@ show_menu() {
         echo "按任意键返回主菜单..."
         read -n 1
         ;;
-      4)
+      6)
         setup_aztec_env
         echo "按任意键返回主菜单..."
         read -n 1
         ;;
-      5)
+      7)
         exit 0
         ;;
       *)
