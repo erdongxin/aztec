@@ -70,6 +70,7 @@ install_aztec() {
 up_aztec(){
   echo -e "${GREEN}Aztec CLI 节点开始升级...${RESET}"
   aztec-up
+  aztec -V
 }
 
 # 检查并创建aztec.env文件
