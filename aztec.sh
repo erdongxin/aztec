@@ -158,16 +158,17 @@ show_menu() {
         read -n 1
         ;;
       4)
-        echo -e "${GREEN}首次投票，请确保你的rpc服务器已升级至新版本${RESET}"
+        echo -e "${GREEN}首次投票，请确保你的rpc服务器已升级至新版本,出现{"jsonrpc":"2.0","id":1} 即为投票成功${RESET}"
 
-        echo -e "${GREEN}正在进行第一次投票{RESET}"
+        echo -e "${GREEN}正在进行第一次投票${RESET}"
         docker exec -i $(docker ps -q --filter ancestor=aztecprotocol/aztec:latest) bash -c "curl -s -X POST http://localhost:8880 -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"method\":\"nodeAdmin_setConfig\",\"params\":[{\"governanceProposerPayload\":\"0x9D8869D17Af6B899AFf1d93F23f863FF41ddc4fa\"}],\"id\":1}'"
-        sleep 3
+        sleep 5
 
         echo -e "${GREEN}正在进行第二次投票${RESET}"
         docker exec -i $(docker ps -q --filter ancestor=aztecprotocol/aztec:latest) bash -c "curl -s -X POST http://localhost:8880 -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"method\":\"nodeAdmin_setConfig\",\"params\":[{\"governanceProposerPayload\":\"0xDCd9DdeAbEF70108cE02576df1eB333c4244C666\"}],\"id\":1}'"
 
-        echo "出现{"jsonrpc":"2.0","id":1} 即为投票成功，按任意键返回主菜单..."
+        echo "----------------------"
+        echo "按任意键返回主菜单..."
         read -n 1
         ;;
       5)
