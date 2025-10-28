@@ -76,6 +76,7 @@ start_node() {
         --sequencer.validatorPrivateKeys "$PRIVATE_KEY" \
         --sequencer.coinbase "$COINBASE" \
         --p2p.p2pIp "$(curl -s ipv4.icanhazip.com)" \
+        --snapshots-url "https://snapshots.aztec.graphops.xyz/files/" \
         --data-directory "$DATA_DIR"
     return $?
 }
