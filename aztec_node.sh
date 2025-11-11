@@ -7,7 +7,7 @@ STAKING_ASSET_HANDLER=0xF739D03e98e23A7B65940848aBA8921fF3bAc4b2
 NODE_NAME="aztec-node"
 DATA_DIR="/root/.$NODE_NAME"
 
-# 导入环境变量
+# 导入环境变量（不再要求 PRIVATE_KEY 和 COINBASE）
 AZTEC_ENV="/root/aztec.env"
 if [ -f "$AZTEC_ENV" ]; then
     source "$AZTEC_ENV"
@@ -17,8 +17,30 @@ else
     exit 1
 fi
 
-# 检查必要环境变量
-required_vars=("BEACON_RPC" "L1_RPC_URL" "PRIVATE_KEY" "COINBASE")
+# 从 keystore JSON 读取私钥和 coinbase 地址
+KEYSTORE_FILE="/root/.aztec/keystore/key1.json"
+if [ ! -f "$KEYSTORE_FILE" ]; then
+    echo -e "\033[0;31m错误: 未找到密钥文件 $KEYSTORE_FILE\033[0m"
+    exit 1
+fi
+
+PRIVATE_KEY=$(jq -r '.validators[0].attester.eth' "$KEYSTORE_FILE")
+COINBASE=$(jq -r '.validators[0].coinbase' "$KEYSTORE_FILE")
+
+# 校验读取结果
+if [ -z "$PRIVATE_KEY" ] || [ "$PRIVATE_KEY" = "null" ]; then
+    echo -e "\033[0;31m错误: 无法从 $KEYSTORE_FILE 读取私钥\033[0m"
+    exit 1
+fi
+if [ -z "$COINBASE" ] || [ "$COINBASE" = "null" ]; then
+    echo -e "\033[0;31m错误: 无法从 $KEYSTORE_FILE 读取 coinbase 地址\033[0m"
+    exit 1
+fi
+
+echo -e "\033[0;32m成功读取私钥和 coinbase 地址\033[0m"
+
+# 检查其他必要环境变量
+required_vars=("BEACON_RPC" "L1_RPC_URL")
 for var in "${required_vars[@]}"; do
     if [ -z "${!var}" ]; then
         echo -e "\033[0;31m错误: 环境变量 $var 未设置，请检查 aztec.env 文件。\033[0m"
@@ -53,7 +75,6 @@ init_data() {
         echo -e "\033[0;32m检测到已有缓存数据，跳过下载\033[0m"
     fi
 
-    # 恢复数据到节点目录
     mkdir -p /root/.aztec-node
     cp -r "$CACHE_DIR/data/"* /root/.aztec-node/
     echo -e "\033[0;32m数据已恢复到节点目录\033[0m"
@@ -76,70 +97,10 @@ start_node() {
         --sequencer.validatorPrivateKeys "$PRIVATE_KEY" \
         --sequencer.coinbase "$COINBASE" \
         --p2p.p2pIp "$(curl -s ipv4.icanhazip.com)" \
-        --snapshots-url "https://snapshots.aztec.graphops.xyz/files/" \
+        --snapshots-urls "https://snapshots.aztec.graphops.xyz/files/" \
         --data-directory "$DATA_DIR"
     return $?
 }
-
-# 获取 aztec 容器 ID
-get_aztec_container() {
-    docker ps -q --filter "name=aztec-start" | head -n1 || true
-}
-
-# 全局变量
-LAST_LOCAL_BLOCK=""
-STUCK_COUNT=0
-CHECK_INTERVAL=60
-STUCK_THRESHOLD=10
-LOG_TAIL_LINES=1000
-
-check_block_sync() {
-    local container_id
-    while true; do
-        container_id=$(get_aztec_container)
-        if [ -z "$container_id" ]; then
-            sleep "$CHECK_INTERVAL"
-            continue
-        fi
-
-        logs=$(docker logs --tail "$LOG_TAIL_LINES" "$container_id" 2>&1 || true)
-
-        # 检测是否存在“卡同步”日志
-        if echo "$logs" | grep -q "Unable to get blob sidecar for"; then
-            printf "\033[0;31m[%s] [BLOCK_SYNC] 检测到卡同步日志，执行修复...\033[0m\n" "$(date '+%H:%M:%S')"
-            delete_node
-            init_data
-            sleep "$CHECK_INTERVAL"
-            continue
-        fi
-
-        latest_block=$(echo "$logs" | grep -Eo '"blockNumber":[0-9]+' | tail -n1 | cut -d: -f2 || true)
-        local_block=$(echo "$logs" | grep 'World state updated' | grep -Eo '"blockNumber":[0-9]+' | tail -n1 | cut -d: -f2 || true)
-
-        if [[ "$latest_block" =~ ^[0-9]+$ && "$local_block" =~ ^[0-9]+$ ]]; then
-            diff=$((latest_block - local_block))
-            printf "\033[0;34m[%s] [BLOCK_SYNC] 最新区块: %s, 本地区块: %s, 落后: %s\033[0m\n" "$(date '+%H:%M:%S')" "$latest_block" "$local_block" "$diff"
-
-            if [ "$local_block" = "$LAST_LOCAL_BLOCK" ]; then
-                STUCK_COUNT=$((STUCK_COUNT + 1))
-            else
-                STUCK_COUNT=0
-                LAST_LOCAL_BLOCK="$local_block"
-            fi
-
-            # 落后超过10块或卡住超过阈值，删除容器触发主循环重启
-            if [ "$diff" -gt 10 ] || [ $STUCK_COUNT -ge $STUCK_THRESHOLD ]; then
-                printf "\033[0;31m[$(date '+%H:%M:%S')] [BLOCK_SYNC] 区块同步异常，删除容器触发主循环重启...\033[0m\n"
-                STUCK_COUNT=0
-                docker rm -f "$container_id" >/dev/null 2>&1 || true
-            fi
-        fi
-
-        sleep "$CHECK_INTERVAL"
-    done
-}
-
-check_block_sync &
 
 # 主循环：健康检测
 while true; do
